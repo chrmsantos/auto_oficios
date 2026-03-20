@@ -3,6 +3,7 @@ import re
 import json
 import sys
 import time
+import types
 import uuid
 import logging
 import getpass
@@ -10,6 +11,7 @@ import winreg
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any, cast
 # google-genai, docxtpl e openpyxl são importados de forma lazy dentro de main()
 # para que o módulo possa ser carregado em testes sem essas dependências.
 
@@ -87,7 +89,7 @@ def configurar_logging(verbose: bool = False) -> str:
     logger.addHandler(fh)
     logger.addHandler(ch)
 
-    def _excepthook(exc_type, exc_value, exc_tb):
+    def _excepthook(exc_type: type[BaseException], exc_value: BaseException, exc_tb: types.TracebackType | None) -> None:  # type: ignore[assignment]
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_tb)
             return
@@ -103,7 +105,7 @@ def configurar_logging(verbose: bool = False) -> str:
 # =============================================================================
 # SEGURANÇA — CHAVE DE API
 # =============================================================================
-def _salvar_api_key_no_ambiente(chave):
+def _salvar_api_key_no_ambiente(chave: str) -> None:
     """Persiste a chave como variável de ambiente do usuário no registro do Windows."""
     with winreg.OpenKey(
         winreg.HKEY_CURRENT_USER, "Environment", access=winreg.KEY_SET_VALUE
@@ -253,7 +255,7 @@ def _extrair_texto_odt(caminho: str) -> str:
         with z.open("content.xml") as f:
             tree = ET.parse(f)
 
-    partes = []
+    partes: list[str] = []
     for elem in tree.iter():
         if elem.tag == f"{{{_ODT_NS}}}p" or elem.tag == f"{{{_ODT_NS}}}line-break":
             partes.append("".join(t for t in elem.itertext()))
@@ -329,7 +331,7 @@ def construir_nome_arquivo(
     return re.sub(r'[\\/*?:"<>|]', "", nome)
 
 
-def limpar_json_da_resposta(texto):
+def limpar_json_da_resposta(texto: str) -> str:
     """Remove marcadores de bloco de código Markdown da resposta textual da IA."""
     texto = texto.strip()
     if texto.startswith("```json"):
@@ -338,7 +340,7 @@ def limpar_json_da_resposta(texto):
         texto = texto.split("```")[1].split("```")[0].strip()
     return texto
 
-def validar_dados_mocao(dados):
+def validar_dados_mocao(dados: dict[str, Any]) -> None:
     """Valida campos obrigatórios no dicionário retornado pela IA. Lança ValueError se inválido."""
     for campo in ("tipo_mocao", "numero_mocao", "autores", "destinatarios"):
         if campo not in dados or not dados[campo]:
@@ -349,14 +351,14 @@ def validar_dados_mocao(dados):
         raise ValueError("'autores' deve ser uma lista.")
     if not isinstance(dados["destinatarios"], list):
         raise ValueError("'destinatarios' deve ser uma lista.")
-    for i, dest in enumerate(dados["destinatarios"]):
-        if not dest.get("nome"):
+    for i, dest in enumerate(dados["destinatarios"]):  # type: ignore[union-attr]
+        if not dest.get("nome"):  # type: ignore[union-attr]
             raise ValueError(f"Destinatário {i + 1} sem campo 'nome'.")
 
 # =============================================================================
 # FUNÇÕES DE PROCESSAMENTO E IA
 # =============================================================================
-def extrair_dados_com_ia(texto_mocao, cliente_genai):
+def extrair_dados_com_ia(texto_mocao: str, cliente_genai: Any) -> dict[str, Any]:
     """Envia o texto da moção para o Gemini e retorna um JSON estruturado."""
     prompt = f"""
     Atue como um assistente legislativo. Leia o texto da moção abaixo e extraia os dados estritamente no formato JSON.
@@ -406,10 +408,9 @@ def extrair_dados_com_ia(texto_mocao, cliente_genai):
     else:
         raise Exception("Número máximo de tentativas excedido por rate limit.")
 
-    json_str = limpar_json_da_resposta(response.text)
-    resultado = json.loads(json_str)
-    if isinstance(resultado, list):
-        resultado = resultado[0]
+    json_str = limpar_json_da_resposta(response.text)  # type: ignore[arg-type]
+    data: Any = json.loads(json_str)
+    resultado: dict[str, Any] = cast(dict[str, Any], data[0] if isinstance(data, list) else data)
 
     validar_dados_mocao(resultado)
     logger.debug(
@@ -418,10 +419,10 @@ def extrair_dados_com_ia(texto_mocao, cliente_genai):
     )
     return resultado
 
-def formatar_autores(lista_autores):
+def formatar_autores(lista_autores: list[str]) -> tuple[str, str]:
     """Formata o texto de autoria (singular/plural) e gera a sigla combinada."""
-    siglas = []
-    nomes_limpos = []
+    siglas: list[str] = []
+    nomes_limpos: list[str] = []
     
     for autor in lista_autores:
         # Busca a sigla no mapa ignorando maiúsculas/minúsculas
@@ -439,7 +440,7 @@ def formatar_autores(lista_autores):
         
     return texto_autoria, sigla_final
 
-def processar_destinatario(dest):
+def processar_destinatario(dest: dict[str, Any]) -> dict[str, str]:
     """Aplica as regras de negócio para endereço, envio e tratamento."""
     # Regra do Prefeito
     if dest.get("is_prefeito") or "prefeito" in dest.get("nome", "").lower():
@@ -489,7 +490,7 @@ def processar_destinatario(dest):
 def main():
     # Imports pesados carregados aqui para não bloquear testes unitários.
     from google import genai  # noqa: PLC0415
-    from docxtpl import DocxTemplate  # noqa: PLC0415
+    from docxtpl import DocxTemplate  # type: ignore[import-untyped]  # noqa: PLC0415
     from openpyxl import Workbook  # noqa: PLC0415
 
     log_path = configurar_logging()
@@ -531,7 +532,7 @@ def main():
     print(f"Foram encontradas {len(textos_mocoes)} moções. Iniciando processamento com IA...")
     logger.info(f"{len(textos_mocoes)} moções encontradas no arquivo.")
 
-    dados_planilha = []
+    dados_planilha: list[list[str]] = []
     numero_oficio_atual = NUMERO_OFICIO_INICIAL
     erros = 0
 
@@ -559,11 +560,11 @@ def main():
             info_dest = processar_destinatario(dest)
             num_oficio_str = f"{numero_oficio_atual:03d}"
 
-            contexto = {
+            contexto: dict[str, str] = {
                 "num_oficio": num_oficio_str,
                 "data_extenso": DATA_EXTENSO,
-                "tipo_mocao": dados_mocao["tipo_mocao"],
-                "num_mocao": dados_mocao["numero_mocao"],
+                "tipo_mocao": str(dados_mocao["tipo_mocao"]),
+                "num_mocao": str(dados_mocao["numero_mocao"]),
                 "vocativo": info_dest["vocativo"],
                 "pronome_corpo": info_dest["pronome_corpo"],
                 "texto_autoria": texto_autoria,
@@ -573,7 +574,7 @@ def main():
             }
 
             doc = DocxTemplate("modelo_oficio.docx")
-            doc.render(contexto)
+            doc.render(contexto)  # type: ignore[arg-type]
 
             nome_arquivo = construir_nome_arquivo(
                 num_oficio_str, SIGLA_SERVIDOR,
@@ -582,7 +583,7 @@ def main():
             )
 
             caminho_salvar = os.path.join(PASTA_SAIDA, nome_arquivo)
-            doc.save(caminho_salvar)
+            doc.save(caminho_salvar)  # type: ignore[arg-type]
             logger.info(f"Gerado: {nome_arquivo}")
             print(f" ✔ Gerado: {nome_arquivo}")
 
@@ -604,6 +605,7 @@ def main():
     logger.info("Gerando planilha Excel de controle...")
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "Controle 2026"
 
     cabecalhos = ["Of. n.º", "Data", "Destinatário", "Assunto", "Vereador", "Envio", "Autor"]
