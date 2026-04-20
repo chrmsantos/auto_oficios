@@ -51,6 +51,7 @@ class AutoOficiosApp(ctk.CTk):
 
         self._queue: queue.Queue[tuple[Any, ...]] = queue.Queue()
         self._processing = False
+        self._cancel_event = threading.Event()
         self._prop_files: dict[str, str] = {}
 
         self._build_ui()
@@ -229,7 +230,7 @@ class AutoOficiosApp(ctk.CTk):
         )
         self._key_status.grid(row=13, column=0, sticky="w", padx=22, pady=(0, 6))
 
-        # ── Spacer + Botão ────────────────────────────────────────────────────
+        # ── Spacer + Botões ────────────────────────────────────────────────────
         self._gen_btn = ctk.CTkButton(
             self._left,
             text="⚡   GERAR OFÍCIOS",
@@ -239,7 +240,20 @@ class AutoOficiosApp(ctk.CTk):
             text_color="#ffffff",
             command=self._start_processing,
         )
-        self._gen_btn.grid(row=15, column=0, sticky="ew", padx=20, pady=(0, 22))
+        self._gen_btn.grid(row=15, column=0, sticky="ew", padx=20, pady=(0, 6))
+
+        self._cancel_btn = ctk.CTkButton(
+            self._left,
+            text="⏹   CANCELAR",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            height=38, corner_radius=10,
+            fg_color=_C["panel"], hover_color=_C["error"],
+            text_color=_C["error"],
+            border_width=1, border_color=_C["error"],
+            command=self._request_cancel,
+        )
+        self._cancel_btn.grid(row=16, column=0, sticky="ew", padx=20, pady=(0, 22))
+        self._cancel_btn.grid_remove()  # hidden until processing starts
 
     # ── Right Panel (log + results) ───────────────────────────────────────────
     def _build_right_panel(self) -> None:
@@ -548,7 +562,9 @@ class AutoOficiosApp(ctk.CTk):
 
         # Reset UI for new run
         self._processing = True
+        self._cancel_event.clear()
         self._gen_btn.configure(state="disabled", text="⏳   Processando…")
+        self._cancel_btn.grid()  # show cancel button
         self._clear_log()
         self._progress.set(0)
         self._progress.configure(progress_color=_C["accent"])
@@ -565,6 +581,10 @@ class AutoOficiosApp(ctk.CTk):
             "api_key":      api_key,
         }
         threading.Thread(target=self._worker, args=(inputs,), daemon=True).start()
+
+    def _request_cancel(self) -> None:
+        self._cancel_event.set()
+        self._cancel_btn.configure(state="disabled", text="Cancelando…")
 
     def _worker(self, inputs: dict[str, Any]) -> None:
         """Runs in a background thread. Sends messages to self._queue."""
@@ -603,6 +623,10 @@ class AutoOficiosApp(ctk.CTk):
             inicio = time.time()
 
             for i, texto in enumerate(textos, 1):
+                if self._cancel_event.is_set():
+                    Q.put(("cancelled", i - 1, total))
+                    return
+
                 Q.put(("log", f"─── Moção {i}/{total} ─────────────────────────", "dim"))
                 Q.put(("progress", i - 1, total))
 
@@ -706,6 +730,8 @@ class AutoOficiosApp(ctk.CTk):
         elif kind == "done":
             generated, errors, elapsed = msg[1], msg[2], msg[3]
             self._processing = False
+            self._cancel_btn.grid_remove()
+            self._cancel_btn.configure(state="normal", text="⏹   CANCELAR")
             mins, secs = divmod(int(elapsed), 60)
             tempo = f"{mins}m {secs}s" if mins else f"{secs}s"
 
@@ -731,8 +757,20 @@ class AutoOficiosApp(ctk.CTk):
                 text_color=color,
             )
 
+        elif kind == "cancelled":
+            done_so_far, total = msg[1], msg[2]
+            self._processing = False
+            self._cancel_btn.grid_remove()
+            self._cancel_btn.configure(state="normal", text="⏹   CANCELAR")
+            self._gen_btn.configure(state="normal", text="⚡   GERAR OFÍCIOS")
+            self._progress.configure(progress_color=_C["warn"])
+            self._prog_label.configure(text=f"Cancelado após {done_so_far} de {total} moções.", text_color=_C["warn"])
+            self._log(f"\n⏹  Processamento cancelado após {done_so_far}/{total} moções.", "warn")
+
         elif kind == "error":
             self._processing = False
+            self._cancel_btn.grid_remove()
+            self._cancel_btn.configure(state="normal", text="⏹   CANCELAR")
             self._gen_btn.configure(state="normal", text="⚡   GERAR OFÍCIOS")
             self._log(f"\n❌  Erro fatal: {msg[1]}", "error")
             self._prog_label.configure(
