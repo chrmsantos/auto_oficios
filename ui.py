@@ -49,6 +49,11 @@ class AutoOficiosApp(ctk.CTk):
         self.minsize(920, 620)
         self.configure(fg_color=_C["bg"])
 
+        # Ícone da janela (quando executado como .py; o exe usa o ícone do spec)
+        _icon = Path(__file__).parent / "icon.ico"
+        if _icon.exists():
+            self.iconbitmap(str(_icon))
+
         self._queue: queue.Queue[tuple[Any, ...]] = queue.Queue()
         self._processing = False
         self._cancel_event = threading.Event()

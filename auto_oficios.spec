@@ -95,5 +95,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,              # substitua por "icon.ico" se tiver um ícone
+    icon="icon.ico",
 )
