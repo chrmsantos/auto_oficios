@@ -35,21 +35,7 @@ _DARK: dict[str, str] = {
     "text":    "#cdd6f4",
     "dim":     "#6c7086",
 }
-_LIGHT: dict[str, str] = {
-    "bg":      "#f0f2f8",
-    "card":    "#ffffff",
-    "panel":   "#eef0f8",
-    "border":  "#d0d4e8",
-    "accent":  "#2563eb",
-    "accent2": "#1d4ed8",
-    "success": "#16a34a",
-    "error":   "#dc2626",
-    "warn":    "#d97706",
-    "text":    "#1e2030",
-    "dim":     "#6b7280",
-}
-
-_C = _DARK  # active palette (mutated on theme toggle)
+_C = _DARK
 
 
 # =============================================================================
@@ -66,7 +52,6 @@ class AutoOficiosApp(ctk.CTk):
         self._queue: queue.Queue[tuple[Any, ...]] = queue.Queue()
         self._processing = False
         self._prop_files: dict[str, str] = {}
-        self._dark_mode = True
 
         self._build_ui()
         self._refresh_proposituras()
@@ -112,15 +97,6 @@ class AutoOficiosApp(ctk.CTk):
             text_color=_C["dim"],
         ).pack(side="left", pady=4)
 
-        self._theme_seg = ctk.CTkSegmentedButton(
-            hdr,
-            values=["🌙  Escuro", "☀️  Claro"],
-            command=self._toggle_theme,
-            font=ctk.CTkFont(size=12),
-            width=190,
-        )
-        self._theme_seg.set("🌙  Escuro")
-        self._theme_seg.grid(row=0, column=1, padx=20, pady=16)
 
     # ── Left Panel (inputs) ───────────────────────────────────────────────────
     def _build_left_panel(self) -> None:
@@ -175,21 +151,18 @@ class AutoOficiosApp(ctk.CTk):
         # ── Data ──────────────────────────────────────────────────────────────
         self._field_label(self._left, 6, "Data dos Ofícios")
         self._data_var = ctk.StringVar(value=datetime.now().strftime("%d-%m-%Y"))
-        self._data_entry = ctk.CTkEntry(
-            self._left, textvariable=self._data_var,
-            placeholder_text="dd-mm-aaaa",
-            font=ctk.CTkFont(size=15), height=42,
-        )
-        self._data_entry.grid(row=7, column=0, sticky="ew", padx=20, pady=(0, 2))
 
-        self._data_hint = ctk.CTkLabel(
-            self._left, text="",
-            font=ctk.CTkFont(size=11),
-            text_color=_C["error"],
-            anchor="w",
+        self._data_btn = ctk.CTkButton(
+            self._left,
+            textvariable=self._data_var,
+            font=ctk.CTkFont(size=15),
+            height=42, anchor="w",
+            fg_color=_C["panel"], hover_color=_C["border"],
+            text_color=_C["text"], border_width=2,
+            border_color=_C["border"],
+            command=self._open_date_picker,
         )
-        self._data_hint.grid(row=8, column=0, sticky="w", padx=22, pady=(0, 10))
-        self._data_var.trace_add("write", self._validate_date)
+        self._data_btn.grid(row=7, column=0, sticky="ew", padx=20, pady=(0, 14))
 
         # ── Propositura ───────────────────────────────────────────────────────
         self._field_label(self._left, 9, "Propositura")
@@ -237,6 +210,7 @@ class AutoOficiosApp(ctk.CTk):
             font=ctk.CTkFont(size=13), height=42, show="•",
         )
         self._apikey_entry.grid(row=0, column=0, sticky="ew")
+        self._apikey_var.trace_add("write", self._on_apikey_changed)
 
         ctk.CTkButton(
             api_frame, text="👁", width=42, height=42,
@@ -402,6 +376,13 @@ class AutoOficiosApp(ctk.CTk):
     # =========================================================================
     # Interactions
     # =========================================================================
+    def _on_apikey_changed(self, *_: Any) -> None:
+        has_key = bool(self._apikey_var.get().strip())
+        self._key_status.configure(
+            text="✔  Chave configurada" if has_key else "⚠  Chave não configurada",
+            text_color=_C["success"] if has_key else _C["warn"],
+        )
+
     def _step_num(self, delta: int) -> None:
         try:
             val = max(1, int(self._num_var.get()) + delta)
@@ -409,35 +390,67 @@ class AutoOficiosApp(ctk.CTk):
             val = 1
         self._num_var.set(str(val))
 
-    def _validate_date(self, *_: Any) -> None:
-        val = self._data_var.get()
+    def _open_date_picker(self) -> None:
+        from tkcalendar import Calendar  # lazy import
+
+        popup = ctk.CTkToplevel(self)
+        popup.title("Selecionar Data")
+        popup.resizable(False, False)
+        popup.grab_set()
+        popup.configure(fg_color=_C["card"])
+
         try:
-            datetime.strptime(val, "%d-%m-%Y")
-            self._data_hint.configure(text="")
-            self._data_entry.configure(border_color=_C["accent"])
+            current = datetime.strptime(self._data_var.get(), "%d-%m-%Y")
         except ValueError:
-            if len(val) == 10:
-                self._data_hint.configure(
-                    text="⚠  Formato inválido — use dd-mm-aaaa",
-                    text_color=_C["error"],
-                )
-                self._data_entry.configure(border_color=_C["error"])
+            current = datetime.now()
+
+        cal = Calendar(
+            popup,
+            selectmode="day",
+            year=current.year,
+            month=current.month,
+            day=current.day,
+            date_pattern="dd-mm-yyyy",
+            background=_C["panel"],
+            foreground=_C["text"],
+            bordercolor=_C["border"],
+            headersbackground=_C["bg"],
+            headersforeground=_C["accent"],
+            selectbackground=_C["accent"],
+            selectforeground="#ffffff",
+            normalbackground=_C["panel"],
+            normalforeground=_C["text"],
+            weekendbackground=_C["panel"],
+            weekendforeground=_C["dim"],
+            othermonthbackground=_C["bg"],
+            othermonthforeground=_C["dim"],
+            othermonthwebackground=_C["bg"],
+            othermonthweforeground=_C["dim"],
+            locale="pt_BR",
+        )
+        cal.pack(padx=14, pady=(14, 6))
+
+        def _confirm() -> None:
+            self._data_var.set(cal.get_date())
+            popup.destroy()
+
+        ctk.CTkButton(
+            popup, text="Confirmar",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            height=38, corner_radius=8,
+            fg_color=_C["accent"], hover_color=_C["accent2"],
+            command=_confirm,
+        ).pack(fill="x", padx=14, pady=(0, 14))
+
+        popup.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width()  - popup.winfo_width())  // 2
+        y = self.winfo_y() + (self.winfo_height() - popup.winfo_height()) // 2
+        popup.geometry(f"+{x}+{y}")
 
     def _toggle_key_visibility(self) -> None:
         self._apikey_entry.configure(
             show="" if self._apikey_entry.cget("show") else "•"
         )
-
-    def _toggle_theme(self, value: str) -> None:
-        global _C
-        if "Claro" in value:
-            ctk.set_appearance_mode("light")
-            _C = _LIGHT
-            self._dark_mode = False
-        else:
-            ctk.set_appearance_mode("dark")
-            _C = _DARK
-            self._dark_mode = True
 
     def _refresh_proposituras(self) -> None:
         from auto_oficios import listar_proposituras  # lazy import
@@ -565,7 +578,7 @@ class AutoOficiosApp(ctk.CTk):
             log_path = _ao.configurar_logging()
             Q.put(("log", f"📋  Log: {log_path}", "dim"))
 
-            os.environ["GEMINI_API_KEY"] = inputs["api_key"]
+            _ao._salvar_api_key_no_ambiente(inputs["api_key"])
             cliente = genai.Client(api_key=inputs["api_key"])
 
             Q.put(("log", f"📂  Lendo: {Path(inputs['arquivo']).name}", "accent"))

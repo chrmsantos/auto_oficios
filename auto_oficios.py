@@ -6,7 +6,6 @@ import time
 import types
 import uuid
 import logging
-import getpass
 import winreg
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -113,29 +112,7 @@ def _salvar_api_key_no_ambiente(chave: str) -> None:
         winreg.SetValueEx(reg, "GEMINI_API_KEY", 0, winreg.REG_SZ, chave)
     # Atualiza o processo atual sem necessidade de reiniciar
     os.environ["GEMINI_API_KEY"] = chave
-
-def obter_api_key():
-    """Lê a chave Gemini da variável de ambiente.
-    Na primeira execução (chave ausente), solicita ao usuário e salva
-    persistentemente no registro do Windows para uso futuro.
-    """
-    chave = os.environ.get("GEMINI_API_KEY", "").strip()
-    if chave:
-        logger.debug("GEMINI_API_KEY carregada da variável de ambiente.")
-        return chave
-
-    print("\n⚠  GEMINI_API_KEY não encontrada nas variáveis de ambiente.")
-    print("   Esta configuração será solicitada apenas uma vez e salva automaticamente.\n")
-    while True:
-        chave = getpass.getpass("   Informe a chave da API Gemini: ").strip()
-        if chave:
-            break
-        print("   Erro: a chave não pode ser vazia.")
-
-    _salvar_api_key_no_ambiente(chave)
-    logger.info("GEMINI_API_KEY salva como variável de ambiente do usuário.")
-    print("   ✔ Chave salva. Nas próximas execuções não será solicitada novamente.\n")
-    return chave
+    logger.info("GEMINI_API_KEY persistida no registro do Windows.")
 
 # =============================================================================
 # LISTAGEM DE PROPOSITURAS
@@ -163,65 +140,6 @@ def listar_proposituras() -> list[Path]:
 
     return list(vistos.values())
 
-
-# =============================================================================
-# INTERFACE DE LINHA DE COMANDO
-# =============================================================================
-def solicitar_inputs():
-    """Solicita os parâmetros de execução ao usuário via CLI."""
-    print("=" * 60)
-    print("   AUTO OFÍCIOS - Gerador de Ofícios Legislativos")
-    print("=" * 60)
-
-    while True:
-        try:
-            num_inicial = int(input("\n1. Número do ofício inicial: "))
-            break
-        except ValueError:
-            print("   Erro: digite um número inteiro válido.")
-
-    while True:
-        sigla = input("2. Iniciais do redator: ").strip().lower()
-        if sigla:
-            break
-        print("   Erro: as iniciais não podem ser vazias.")
-
-    while True:
-        data_str = input("3. Data dos ofícios (dd-mm-aaaa): ").strip()
-        try:
-            data = datetime.strptime(data_str, "%d-%m-%Y")
-            data_extenso = f"{data.day} de {MESES_PT[data.month]} de {data.year}"
-            data_iso = data.strftime("%Y-%m-%d")
-            break
-        except ValueError:
-            print("   Erro: formato inválido. Use dd-mm-aaaa (ex: 18-02-2026).")
-
-    # --- Seleção da propositura a partir da pasta proposituras/ ---
-    proposituras = listar_proposituras()
-    if not proposituras:
-        print(f"\n   Erro: nenhum arquivo suportado encontrado em '{PASTA_PROPOSITURAS}/'.")
-        print(f"   Adicione arquivos .txt/.docx/.doc/.odt/.pdf e tente novamente.")
-        raise SystemExit(1)
-
-    if len(proposituras) == 1:
-        arquivo = str(proposituras[0])
-        print(f"\n4. Propositura encontrada automaticamente: {proposituras[0].name}")
-    else:
-        print(f"\n4. Proposituras disponíveis em '{PASTA_PROPOSITURAS}/':")
-        for idx, p in enumerate(proposituras, start=1):
-            print(f"   [{idx}] {p.name}")
-        while True:
-            try:
-                escolha = int(input(f"   Escolha (1-{len(proposituras)}): "))
-                if 1 <= escolha <= len(proposituras):
-                    arquivo = str(proposituras[escolha - 1])
-                    break
-                print(f"   Erro: digite um número entre 1 e {len(proposituras)}.")
-            except ValueError:
-                print("   Erro: entrada inválida. Digite o número da opção.")
-
-    print("-" * 60)
-    return num_inicial, sigla, data_extenso, data_iso, arquivo
 
 # =============================================================================
 # RESOLUÇÃO DE FORMATO PREFERENCIAL
@@ -399,8 +317,10 @@ def extrair_dados_com_ia(texto_mocao: str, cliente_genai: Any) -> dict[str, Any]
             match = re.search(r'retry_delay\s*\{\s*seconds:\s*(\d+)', msg)
             espera = int(match.group(1)) + 2 if match else 60
             if '429' in msg:
-                logger.warning(f"Rate limit atingido. Aguardando {espera}s (tentativa {tentativa + 1}/{MAX_TENTATIVAS}).")
-                print(f"   Rate limit atingido. Aguardando {espera}s antes de tentar novamente...")
+                logger.warning(
+                    f"Rate limit atingido. Aguardando {espera}s "
+                    f"(tentativa {tentativa + 1}/{MAX_TENTATIVAS})."
+                )
                 time.sleep(espera)
                 continue
             else:
@@ -408,7 +328,8 @@ def extrair_dados_com_ia(texto_mocao: str, cliente_genai: Any) -> dict[str, Any]
                 raise
 
         raw_text: str = response.text  # type: ignore[union-attr]
-        logger.debug(f"Resposta bruta da IA (tentativa {tentativa + 1}): {raw_text!r}")
+        _preview = raw_text[:500] + ("…" if len(raw_text) > 500 else "")
+        logger.debug(f"Resposta bruta da IA (tentativa {tentativa + 1}): {_preview!r}")
         try:
             json_str = limpar_json_da_resposta(raw_text)
             data: Any = json.loads(json_str)
@@ -417,7 +338,7 @@ def extrair_dados_com_ia(texto_mocao: str, cliente_genai: Any) -> dict[str, Any]
         except (ValueError, json.JSONDecodeError) as e:
             logger.warning(
                 f"Resposta inválida da IA (tentativa {tentativa + 1}/{MAX_TENTATIVAS}): {e}. "
-                f"Resposta bruta: {raw_text!r}"
+                f"Resposta bruta: {_preview!r}"
             )
             if tentativa < MAX_TENTATIVAS - 1:
                 continue
@@ -496,146 +417,7 @@ def processar_destinatario(dest: dict[str, Any]) -> dict[str, str]:
         "envio": envio
     }
 
-# =============================================================================
-# EXECUÇÃO PRINCIPAL
-# =============================================================================
-def main():
-    # Imports pesados carregados aqui para não bloquear testes unitários.
-    from google import genai  # noqa: PLC0415
-    from docxtpl import DocxTemplate  # type: ignore[import-untyped]  # noqa: PLC0415
-    from openpyxl import Workbook  # noqa: PLC0415
-
-    log_path = configurar_logging()
-    NUMERO_OFICIO_INICIAL, SIGLA_SERVIDOR, DATA_EXTENSO, DATA_ISO, ARQUIVO_MOCOES = solicitar_inputs()
-    inicio = time.time()
-
-    try:
-        api_key = obter_api_key()
-    except ValueError as e:
-        logger.critical(str(e))
-        print(f"Erro fatal: {e}")
-        return
-    cliente_genai = genai.Client(api_key=api_key)
-
-    logger.info(
-        f"Sessão iniciada — ofício inicial: {NUMERO_OFICIO_INICIAL}, "
-        f"redator: '{SIGLA_SERVIDOR}', data: '{DATA_EXTENSO}'."
-    )
-    print(f"   Log salvo em: {log_path}\n")
-
-    Path(PASTA_SAIDA).mkdir(exist_ok=True)
-
-    if not Path("modelo_oficio.docx").exists():
-        logger.critical("Arquivo 'modelo_oficio.docx' não encontrado.")
-        print("Erro: Arquivo 'modelo_oficio.docx' não encontrado.")
-        return
-
-    # 1. Ler o arquivo de moções
-    try:
-        conteudo_completo = ler_arquivo_mocoes(ARQUIVO_MOCOES)
-    except Exception as e:
-        logger.critical(f"Erro ao ler arquivo de moções '{ARQUIVO_MOCOES}': {e}")
-        print(f"Erro ao ler arquivo: {e}")
-        return
-
-    textos_mocoes = re.split(r'(?=MOÇÃO Nº)', conteudo_completo)
-    textos_mocoes = [t.strip() for t in textos_mocoes if t.strip()]
-
-    print(f"Foram encontradas {len(textos_mocoes)} moções. Iniciando processamento com IA...")
-    logger.info(f"{len(textos_mocoes)} moções encontradas no arquivo.")
-
-    dados_planilha: list[list[str]] = []
-    numero_oficio_atual = NUMERO_OFICIO_INICIAL
-    erros = 0
-
-    for i, texto in enumerate(textos_mocoes, start=1):
-        print(f"Processando moção {i}/{len(textos_mocoes)}...")
-        logger.info(f"--- Moção {i}/{len(textos_mocoes)} ---")
-        try:
-            dados_mocao = extrair_dados_com_ia(texto, cliente_genai)
-        except (ValueError, json.JSONDecodeError) as e:
-            logger.error(f"Dados inválidos na moção {i}: {e}")
-            print(f"   Erro nos dados da moção {i}: {e}")
-            erros += 1
-            continue
-        except Exception as e:
-            logger.error(f"Erro ao processar moção {i}: {e}", exc_info=True)
-            print(f"   Erro ao processar moção {i}: {e}")
-            erros += 1
-            continue
-
-        dados_mocao["numero_mocao"] = normalizar_numero_mocao(dados_mocao["numero_mocao"])
-
-        texto_autoria, sigla_autores = formatar_autores(dados_mocao["autores"])
-
-        for dest in dados_mocao["destinatarios"]:
-            info_dest = processar_destinatario(dest)
-            num_oficio_str = f"{numero_oficio_atual:03d}"
-
-            contexto: dict[str, str] = {
-                "num_oficio": num_oficio_str,
-                "data_extenso": DATA_EXTENSO,
-                "tipo_mocao": str(dados_mocao["tipo_mocao"]),
-                "num_mocao": str(dados_mocao["numero_mocao"]),
-                "vocativo": info_dest["vocativo"],
-                "pronome_corpo": info_dest["pronome_corpo"],
-                "texto_autoria": texto_autoria,
-                "tratamento_rodape": info_dest["tratamento_rodape"],
-                "destinatario_nome": info_dest["destinatario_nome"],
-                "destinatario_endereco": info_dest["destinatario_endereco"]
-            }
-
-            doc = DocxTemplate("modelo_oficio.docx")
-            doc.render(contexto)  # type: ignore[arg-type]
-
-            nome_arquivo = construir_nome_arquivo(
-                num_oficio_str, SIGLA_SERVIDOR,
-                dados_mocao["tipo_mocao"], dados_mocao["numero_mocao"],
-                info_dest["envio"], dest["nome"], sigla_autores,
-            )
-
-            caminho_salvar = os.path.join(PASTA_SAIDA, nome_arquivo)
-            doc.save(caminho_salvar)  # type: ignore[arg-type]
-            logger.info(f"Gerado: {nome_arquivo}")
-            print(f" ✔ Gerado: {nome_arquivo}")
-
-            assunto_planilha = f"Encaminha Moção de {dados_mocao['tipo_mocao']} nº {dados_mocao['numero_mocao']}/2026"
-            dados_planilha.append([
-                num_oficio_str,
-                DATA_ISO,
-                f"{info_dest['tratamento_rodape']} {info_dest['destinatario_nome']}".strip(),
-                assunto_planilha,
-                ", ".join(dados_mocao["autores"]),
-                info_dest["envio"],
-                SIGLA_SERVIDOR
-            ])
-
-            numero_oficio_atual += 1
-
-    # 2. Gerar Planilha Excel de Controle
-    print("\nGerando planilha de controle Excel...")
-    logger.info("Gerando planilha Excel de controle...")
-    wb = Workbook()
-    ws = wb.active
-    assert ws is not None
-    ws.title = "Controle 2026"
-
-    cabecalhos = ["Of. n.º", "Data", "Destinatário", "Assunto", "Vereador", "Envio", "Autor"]
-    ws.append(cabecalhos)
-    for linha in dados_planilha:
-        ws.append(linha)
-    Path(PASTA_PLANILHA).mkdir(exist_ok=True)
-    wb.save(os.path.join(PASTA_PLANILHA, "CONTROLE_OFICIOS.xlsx"))
-
-    elapsed = time.time() - inicio
-    minutos, segundos = divmod(int(elapsed), 60)
-    tempo_str = f"{minutos}m {segundos}s" if minutos else f"{segundos}s"
-    resumo = f"{len(dados_planilha)} ofício(s) gerado(s), {erros} erro(s)."
-
-    print(f"\n✨ Processo concluído! Documentos e planilha gerados com sucesso.")
-    print(f"   Resumo: {resumo}")
-    print(f"⏱ Tempo decorrido: {tempo_str}")
-    logger.info(f"Processo concluído. {resumo} Tempo: {tempo_str}.")
-
 if __name__ == "__main__":
-    main()
+    from ui import AutoOficiosApp
+    app = AutoOficiosApp()
+    app.mainloop()
