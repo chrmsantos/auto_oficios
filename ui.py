@@ -16,6 +16,7 @@ from tkinter import filedialog, messagebox
 from typing import Any
 
 import customtkinter as ctk
+import auto_oficios as _ao
 
 # ─── Aparência padrão ─────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
@@ -59,6 +60,7 @@ class AutoOficiosApp(ctk.CTk):
         self._cancel_event = threading.Event()
         self._prop_files: dict[str, str] = {}
 
+        _ao._migrar_chave_do_registro()
         self._build_ui()
         self._refresh_proposituras()
         self._poll_queue()
@@ -156,7 +158,7 @@ class AutoOficiosApp(ctk.CTk):
 
         # ── Data ──────────────────────────────────────────────────────────────
         self._field_label(self._left, 6, "Data dos Ofícios")
-        self._data_var = ctk.StringVar(value=datetime.now().strftime("%d-%m-%Y"))
+        self._data_var = ctk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
 
         self._data_btn = ctk.CTkButton(
             self._left,
@@ -208,7 +210,7 @@ class AutoOficiosApp(ctk.CTk):
         api_frame.grid(row=12, column=0, sticky="ew", padx=20, pady=(0, 4))
         api_frame.grid_columnconfigure(0, weight=1)
 
-        env_key = os.environ.get("GEMINI_API_KEY", "")
+        env_key = _ao._carregar_api_key()
         self._apikey_var = ctk.StringVar(value=env_key)
         self._apikey_entry = ctk.CTkEntry(
             api_frame, textvariable=self._apikey_var,
@@ -419,7 +421,7 @@ class AutoOficiosApp(ctk.CTk):
         popup.configure(fg_color=_C["card"])
 
         try:
-            current = datetime.strptime(self._data_var.get(), "%d-%m-%Y")
+            current = datetime.strptime(self._data_var.get(), "%d/%m/%Y")
         except ValueError:
             current = datetime.now()
 
@@ -545,7 +547,7 @@ class AutoOficiosApp(ctk.CTk):
 
         data_str = self._data_var.get().strip()
         try:
-            data_dt = datetime.strptime(data_str, "%d-%m-%Y")
+            data_dt = datetime.strptime(data_str, "%d/%m/%Y")
         except ValueError:
             messagebox.showerror("Erro de Validação", "Data inválida. Use dd-mm-aaaa.")
             return
@@ -598,7 +600,6 @@ class AutoOficiosApp(ctk.CTk):
             from google import genai
             from docxtpl import DocxTemplate
             from openpyxl import Workbook
-            import auto_oficios as _ao
 
             log_path = _ao.configurar_logging()
             Q.put(("log", f"📋  Log: {log_path}", "dim"))

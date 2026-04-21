@@ -16,6 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import auto_oficios
 from auto_oficios import (
+    _carregar_api_key,
+    _migrar_chave_do_registro,
     _salvar_api_key_no_ambiente,
     configurar_logging,
     construir_nome_arquivo,
@@ -605,32 +607,102 @@ class TestConfigurarLogging:
 # =============================================================================
 class TestSalvarApiKey:
 
-    def _patch_registry(self):
-        mock_key = MagicMock()
-        mock_key.__enter__ = MagicMock(return_value=MagicMock())
-        mock_key.__exit__ = MagicMock(return_value=False)
-        return patch("winreg.OpenKey", return_value=mock_key), patch("winreg.SetValueEx")
-
-    def test_escreve_no_registro_e_no_ambiente(self):
-        p_open, p_set = self._patch_registry()
-        with p_open, p_set as mock_set, patch.dict(os.environ, {}, clear=False):
+    def test_escreve_no_keyring_e_no_ambiente(self):
+        with patch("keyring.set_password") as mock_set, \
+                patch.dict(os.environ, {}, clear=False):
             _salvar_api_key_no_ambiente("minha-chave")
-            mock_set.assert_called_once()
+            mock_set.assert_called_once_with(
+                auto_oficios._KEYRING_SERVICE,
+                auto_oficios._KEYRING_USERNAME,
+                "minha-chave",
+            )
             assert os.environ["GEMINI_API_KEY"] == "minha-chave"
 
     def test_chave_diferente_sobrescreve_ambiente(self):
-        p_open, p_set = self._patch_registry()
-        with p_open, p_set, patch.dict(os.environ, {"GEMINI_API_KEY": "velha"}, clear=False):
+        with patch("keyring.set_password"), \
+                patch.dict(os.environ, {"GEMINI_API_KEY": "velha"}, clear=False):
             _salvar_api_key_no_ambiente("nova-chave")
             assert os.environ["GEMINI_API_KEY"] == "nova-chave"
 
     def test_loga_apos_salvar(self, tmp_path, monkeypatch, caplog):
         monkeypatch.setattr(auto_oficios, "PASTA_LOGS", str(tmp_path))
         configurar_logging()
-        p_open, p_set = self._patch_registry()
-        with p_open, p_set, caplog.at_level(logging.INFO, logger="auto_oficios"):
+        with patch("keyring.set_password"), caplog.at_level(logging.INFO, logger="auto_oficios"):
             _salvar_api_key_no_ambiente("x")
         assert any("GEMINI_API_KEY" in r.message for r in caplog.records)
+
+
+# =============================================================================
+# _carregar_api_key
+# =============================================================================
+class TestCarregarApiKey:
+
+    def test_retorna_chave_do_keyring(self):
+        with patch("keyring.get_password", return_value="chave-secreta"):
+            assert _carregar_api_key() == "chave-secreta"
+
+    def test_retorna_string_vazia_quando_nao_ha_chave(self):
+        with patch("keyring.get_password", return_value=None):
+            assert _carregar_api_key() == ""
+
+    def test_consulta_servico_e_usuario_corretos(self):
+        with patch("keyring.get_password") as mock_get:
+            mock_get.return_value = "k"
+            _carregar_api_key()
+            mock_get.assert_called_once_with(
+                auto_oficios._KEYRING_SERVICE,
+                auto_oficios._KEYRING_USERNAME,
+            )
+
+
+# =============================================================================
+# _migrar_chave_do_registro
+# =============================================================================
+class TestMigrarChaveDoRegistro:
+
+    def _patch_winreg(self, key_value: str | None):
+        """Returns context managers that simulate a registry with the given value."""
+        mock_reg = MagicMock()
+        mock_reg.__enter__ = MagicMock(return_value=mock_reg)
+        mock_reg.__exit__ = MagicMock(return_value=False)
+
+        if key_value is None:
+            mock_reg.side_effect = None  # reset
+            query_side_effect = FileNotFoundError
+        else:
+            query_side_effect = None
+
+        def fake_query(reg, name):
+            if query_side_effect:
+                raise query_side_effect()
+            return (key_value, 1)
+
+        import winreg
+        p_open = patch("winreg.OpenKey", return_value=mock_reg)
+        p_query = patch("winreg.QueryValueEx", side_effect=fake_query)
+        p_delete = patch("winreg.DeleteValue")
+        p_set = patch("keyring.set_password")
+        return p_open, p_query, p_delete, p_set, mock_reg
+
+    def test_migra_chave_existente(self):
+        p_open, p_query, p_delete, p_set, _ = self._patch_winreg("chave-antiga")
+        with p_open, p_query, p_delete as mock_del, p_set as mock_set:
+            _migrar_chave_do_registro()
+            mock_set.assert_called_once()
+            mock_del.assert_called_once()
+
+    def test_nao_faz_nada_se_chave_ausente(self):
+        p_open, p_query, p_delete, p_set, _ = self._patch_winreg(None)
+        with p_open, p_query, p_delete as mock_del, p_set as mock_set:
+            _migrar_chave_do_registro()
+            mock_set.assert_not_called()
+            mock_del.assert_not_called()
+
+    def test_tolerante_a_falha_no_registro(self, caplog):
+        with patch("winreg.OpenKey", side_effect=OSError("sem acesso")), \
+                caplog.at_level(logging.WARNING, logger="auto_oficios"):
+            _migrar_chave_do_registro()  # must not raise
+        assert any("Falha" in r.message for r in caplog.records)
 
 
 # =============================================================================

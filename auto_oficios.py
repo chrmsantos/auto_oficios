@@ -6,7 +6,7 @@ import time
 import types
 import uuid
 import logging
-import winreg
+import keyring
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -109,15 +109,51 @@ def configurar_logging(verbose: bool = False) -> str:
 # =============================================================================
 # SEGURANÇA — CHAVE DE API
 # =============================================================================
+_KEYRING_SERVICE = "auto_oficios"
+_KEYRING_USERNAME = "gemini_api_key"
+
+
 def _salvar_api_key_no_ambiente(chave: str) -> None:
-    """Persiste a chave como variável de ambiente do usuário no registro do Windows."""
-    with winreg.OpenKey(
-        winreg.HKEY_CURRENT_USER, "Environment", access=winreg.KEY_SET_VALUE
-    ) as reg:
-        winreg.SetValueEx(reg, "GEMINI_API_KEY", 0, winreg.REG_SZ, chave)
-    # Atualiza o processo atual sem necessidade de reiniciar
+    """Persiste a chave de API de forma criptografada no Windows Credential Manager."""
+    keyring.set_password(_KEYRING_SERVICE, _KEYRING_USERNAME, chave)
+    # Mantém a variável de ambiente na sessão atual para SDKs que lêem os.environ.
     os.environ["GEMINI_API_KEY"] = chave
-    logger.info("GEMINI_API_KEY persistida no registro do Windows.")
+    logger.info("GEMINI_API_KEY persistida no Credential Manager do Windows.")
+
+
+def _carregar_api_key() -> str:
+    """Recupera a chave de API do Windows Credential Manager."""
+    return keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME) or ""
+
+
+def _migrar_chave_do_registro() -> None:
+    """Migra a chave em texto simples do registro do Windows para o Credential Manager.
+
+    Na primeira execução após a atualização, lê o valor GEMINI_API_KEY do registro
+    do usuário (armazenamento legado), salva-o de forma criptografada via keyring e
+    remove o valor em texto simples do registro.
+    """
+    import winreg  # noqa: PLC0415 — importação local; necessária apenas na migração
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            "Environment",
+            access=winreg.KEY_READ | winreg.KEY_SET_VALUE,
+        ) as reg:
+            try:
+                value, _ = winreg.QueryValueEx(reg, "GEMINI_API_KEY")
+            except FileNotFoundError:
+                return  # nada a migrar
+            if value:
+                _salvar_api_key_no_ambiente(value)
+                logger.info("GEMINI_API_KEY migrada do registro para o Credential Manager.")
+            try:
+                winreg.DeleteValue(reg, "GEMINI_API_KEY")
+                logger.info("Valor GEMINI_API_KEY removido do registro do Windows.")
+            except FileNotFoundError:
+                pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Falha ao migrar GEMINI_API_KEY do registro: %s", exc)
 
 # =============================================================================
 # LISTAGEM DE PROPOSITURAS

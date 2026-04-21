@@ -55,6 +55,10 @@ a = Analysis(
         "google.auth.transport.requests",
         # Windows
         "winreg",
+        # Credential Manager (API key encryption)
+        "keyring",
+        "keyring.backends",
+        "keyring.backends.Windows",
         # Core app
         "auto_oficios",
         # Misc
