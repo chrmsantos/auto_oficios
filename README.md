@@ -41,7 +41,7 @@ pip install google-genai docxtpl openpyxl pytest
 ### Arquivos necessários antes de executar
 
 | Arquivo | Descrição |
-|---|---|
+| --- | --- |
 | `mocoes.txt` | Texto completo das moções, uma após a outra |
 | `modelo_oficio.docx` | Template Word com as variáveis de contexto |
 
@@ -61,7 +61,7 @@ Na primeira execução, a chave da API Gemini será solicitada e salva automatic
 
 ### Saídas geradas
 
-```
+```text
 oficios_gerados/          # Documentos .docx gerados
 logs/                     # Logs de cada sessão
 CONTROLE_OFICIOS_FINAL.xlsx  # Planilha de controle consolidada
@@ -69,7 +69,7 @@ CONTROLE_OFICIOS_FINAL.xlsx  # Planilha de controle consolidada
 
 ## Estrutura do projeto
 
-```
+```text
 auto_oficios/
 ├── auto_oficios.py           # Código principal
 ├── modelo_oficio.docx        # Template de ofício (não versionado)

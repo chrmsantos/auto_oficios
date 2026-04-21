@@ -63,10 +63,9 @@ class AutoOficiosApp(ctk.CTk):
         self._cancel_event = threading.Event()
         self._prop_files: dict[str, str] = {}
 
-        _ao._migrar_chave_do_registro()
         self._build_ui()
         self.after(0, self._refresh_proposituras)   # defer disk scan; window renders first
-        self.after(10, self._load_api_key_async)    # defer 538ms keyring init; window renders first
+        self.after(10, self._load_api_key_async)    # defer registry/keyring init; window renders first
         self._poll_queue()
 
     # =========================================================================
@@ -417,13 +416,15 @@ class AutoOficiosApp(ctk.CTk):
         )
 
     def _load_api_key_async(self) -> None:
-        """Loads the API key from Credential Manager in a background thread.
+        """Runs registry migration and key loading in a background thread.
 
-        Deferred to after window renders so the ~540 ms keyring initialisation
-        does not block the UI from appearing.
+        Deferred so registry/keyring I/O (~540 ms on first run) does not block
+        the window from appearing.  Migration must complete before key loading,
+        and both run sequentially in the same thread so ordering is preserved.
         """
         def _fetch() -> None:
             try:
+                _ao._migrar_chave_do_registro()  # no-op after first run
                 key = _ao._carregar_api_key()
             except Exception:
                 key = ""
@@ -538,18 +539,20 @@ class AutoOficiosApp(ctk.CTk):
     # Log helpers (must be called from main thread only)
     # =========================================================================
     def _log(self, text: str, tag: str = "") -> None:
-        self._log_box.configure(state="normal")
+        tb = self._log_box._textbox  # bypass CTk configure overhead for state changes
+        tb.configure(state="normal")
         if tag:
-            self._log_box._textbox.insert("end", text + "\n", tag)
+            tb.insert("end", text + "\n", tag)
         else:
-            self._log_box._textbox.insert("end", text + "\n")
-        self._log_box._textbox.see("end")
-        self._log_box.configure(state="disabled")
+            tb.insert("end", text + "\n")
+        tb.see("end")
+        tb.configure(state="disabled")
 
     def _clear_log(self) -> None:
-        self._log_box.configure(state="normal")
-        self._log_box.delete("1.0", "end")
-        self._log_box.configure(state="disabled")
+        tb = self._log_box._textbox
+        tb.configure(state="normal")
+        tb.delete("1.0", "end")
+        tb.configure(state="disabled")
 
     # =========================================================================
     # Processing

@@ -10,6 +10,7 @@
 **ZWave OfficeLetters** is a Windows desktop app that automates the generation of legislative letters ("ofícios") for the Câmara Municipal de Santa Bárbara d'Oeste/SP.
 
 Workflow:
+
 1. User places a `.txt`/`.docx`/`.pdf`/`.odt` file containing one or more *moções* (legislative motions) in `proposituras/`.
 2. User fills in the GUI: ofício start number, author initials, date, propositura file, Gemini API key.
 3. App calls **Google Gemini AI** to extract structured data from each moção text (type, number, authors, recipients).
@@ -30,7 +31,7 @@ Workflow:
 ## 3. Runtime Environment
 
 | Item | Detail |
-|---|---|
+| --- | --- |
 | OS | Windows 10+ (required — uses `winreg`, `win32com`, `os.startfile`) |
 | Python | 3.14.4 (in-workspace venv at `.venv`) |
 | Virtual env | `.venv\Scripts\activate` |
@@ -41,7 +42,7 @@ Workflow:
 ## 4. Key Dependencies
 
 | Package | Version | Role |
-|---|---|---|
+| --- | --- | --- |
 | `google-genai` | 1.67.0 | Gemini AI client |
 | `customtkinter` | 5.2.2 | Dark-mode GUI framework (tkinter-based) |
 | `tkcalendar` | 1.6.1 | Date picker widget (`locale="pt_BR"`) |
@@ -60,7 +61,7 @@ Workflow:
 
 ## 5. Project Structure
 
-```
+```text
 officeletters/
 ├── auto_oficios.py          # Core business logic — the only module with unit tests
 ├── ui.py                    # Full customtkinter GUI — sole entry point for users
@@ -111,7 +112,7 @@ MESES_PT           = {1: "janeiro", ..., 12: "dezembro"}
 **Public functions:**
 
 | Function | Signature | Description |
-|---|---|---|
+| --- | --- | --- |
 | `configurar_logging` | `(verbose=False) -> str` | Sets up `RotatingFileHandler` (2 MB, 5 backups) + `StreamHandler`. Installs `sys.excepthook`. Returns log file path. |
 | `_salvar_api_key_no_ambiente` | `(chave: str) -> None` | Writes API key to `HKCU\Environment` registry + `os.environ`. |
 | `listar_proposituras` | `() -> list[Path]` | Scans `PASTA_PROPOSITURAS`, deduplicates by format preference. |
@@ -121,11 +122,12 @@ MESES_PT           = {1: "janeiro", ..., 12: "dezembro"}
 | `validar_dados_mocao` | `(dados: dict) -> None` | Validates required fields. Raises `ValueError` on failure. |
 | `extrair_dados_com_ia` | `(texto_mocao, cliente_genai) -> dict` | Sends text to Gemini, retries up to 5×. Handles rate-limit (429) with `time.sleep`. |
 | `normalizar_numero_mocao` | `(numero: str) -> str` | Strips year suffixes: `"124/2026" → "124"`. |
-| `construir_nome_arquivo` | `(num_oficio_str, sigla_servidor, tipo_mocao, num_mocao, envio, nome_dest, sigla_autores) -> str` | Builds `.docx` filename. Strips Windows-illegal chars (`\/*?:"<>|`). Appends `-{year_2digit}` to moção number. |
+| `construir_nome_arquivo` | `(num_oficio_str, sigla_servidor, tipo_mocao, num_mocao, envio, nome_dest, sigla_autores) -> str` | Builds `.docx` filename. Strips Windows-illegal chars (`\/*?:"<>\|`). Appends `-{year_2digit}` to moção number. |
 | `formatar_autores` | `(lista_autores: list[str]) -> tuple[str, str]` | Returns `(text_autoria, sigla_combinada)`. Unknown authors get sigla `"INDEF"`. |
 | `processar_destinatario` | `(dest: dict) -> dict` | Applies business rules for address/envio/tratamento. Mayor override is hardcoded via `config.json`. |
 
 **`__main__` block:**
+
 ```python
 if __name__ == "__main__":
     from ui import AutoOficiosApp
@@ -142,12 +144,14 @@ if __name__ == "__main__":
 Appearance: dark mode only (`ctk.set_appearance_mode("dark")`), blue accent. Window: 1140×720 (min 920×620).
 
 **Layout:** 3-row grid.
+
 - Row 0: header bar
 - Row 1 col 0: left panel (inputs, 370px fixed width)
 - Row 1 col 1: right panel (log + progress, flexible)
 - Row 2: footer
 
 **Left panel input fields:**
+
 1. Número do ofício inicial — entry + `−`/`+` steppers
 2. Iniciais do redator — text entry
 3. Data dos ofícios — button opens `tkcalendar.Calendar` (pt_BR, dd-mm-yyyy)
@@ -156,19 +160,22 @@ Appearance: dark mode only (`ctk.set_appearance_mode("dark")`), blue accent. Win
 6. "⚡ GERAR OFÍCIOS" button (disabled during processing)
 
 **Right panel:**
+
 - Progress bar + label + percentage
 - CTkTextbox log with colored tags: `success` (green), `error` (red), `warn` (yellow), `dim` (gray), `accent` (blue), `bold`
 - Summary bar + "📁 Abrir Pasta de Saída" button
 
 **Threading model:**
+
 - `_start_processing()` validates inputs on main thread, then spawns a daemon `threading.Thread`
 - `_worker(inputs)` runs in background; communicates via `queue.Queue` with typed message tuples
 - `_poll_queue()` drains the queue every 100ms via `self.after(100, ...)`
 - Message types: `("log", text, tag)`, `("progress", current, total)`, `("done", generated, errors, elapsed)`, `("error", msg)`
 
-**Cancel:** `self._cancel_event = threading.Event()` — worker checks `_cancel_event.is_set()` between moções. Cancel button appears during processing, replacing "GERAR OFÍCIOS".
+**Cancel:**  `self._cancel_event = threading.Event()` — worker checks `_cancel_event.is_set()` between moções. Cancel button appears during processing, replacing "GERAR OFÍCIOS".
 
 **Lazy imports** (to keep module loadable without optional deps installed):
+
 ```python
 from tkcalendar import Calendar          # in _open_date_picker()
 from auto_oficios import listar_proposituras  # in _refresh_proposituras()
@@ -209,11 +216,14 @@ Editable without recompiling. Loaded by `auto_oficios.py` at import.
 ## 7. Business Rules
 
 ### Moção splitting
+
 The input file can contain multiple moções. They are split by regex: `re.split(r'(?=MOÇÃO Nº)', conteudo)`. Each chunk is sent to the AI independently.
 
 ### AI extraction (Gemini)
+
 - Model: configured via `extrair_dados_com_ia` — check the `model=` argument for the current model name.
 - Schema returned by AI:
+
 ```json
 {
   "tipo_mocao": "Aplauso" | "Apelo",
@@ -229,12 +239,14 @@ The input file can contain multiple moções. They are split by regex: `re.split
   }]
 }
 ```
+
 - Up to 5 retry attempts for API errors (429→sleep) and invalid/unparseable JSON.
 - Raw response logged at DEBUG level, truncated to 500 chars.
 
 ### Recipient processing (`processar_destinatario`)
+
 | Condition | Result |
-|---|---|
+| --- | --- |
 | `is_prefeito=true` OR `"prefeito" in nome.lower()` | Fixed data from `config.json`: name, address, "Vossa Excelência", envio="Protocolo" |
 | `is_instituicao=true`, name starts with "a/A" | `tratamento_rodape = "À"` |
 | `is_instituicao=true`, otherwise | `tratamento_rodape = "Ao"` |
@@ -244,12 +256,15 @@ The input file can contain multiple moções. They are split by regex: `re.split
 | Neither | `envio = "Em Mãos"` |
 
 ### Filename format
-```
+
+```text
 Of. {num:03d} - {sigla} - Moção de {tipo} nº {num_mocao}-{year_2digit} - {envio_lower} - {dest_nome} - {sigla_autores}.docx
 ```
+
 `year_2digit` is derived from the selected date year at runtime (not hardcoded).
 
 ### Excel spreadsheet
+
 Columns: `Of. n.º | Data | Destinatário | Assunto | Vereador | Envio | Autor`  
 File: `planilha_gerada/CONTROLE_OFICIOS.xlsx` — **overwritten on every run** (intentional).  
 Sheet name: `Controle {year}` (dynamic).
@@ -259,6 +274,7 @@ Sheet name: `Controle {year}` (dynamic).
 ## 8. Testing
 
 **Run all tests:**
+
 ```powershell
 & ".venv\Scripts\python.exe" -m pytest
 ```
@@ -268,7 +284,7 @@ Sheet name: `Controle {year}` (dynamic).
 **Test file:** `tests/test_auto_oficios.py` (769 lines)
 
 | Class | Tests | What it covers |
-|---|---|---|
+| --- | --- | --- |
 | `TestLimparJsonDaResposta` | 6 | JSON markdown fence stripping |
 | `TestValidarDadosMocao` | 12 | Required fields, type checks, multi-recipient |
 | `TestNormalizarNumeroMocao` | 10 | Year suffix variants (parametrize) |
@@ -283,6 +299,7 @@ Sheet name: `Controle {year}` (dynamic).
 | `TestExtrairDadosComIA` | 12 | Happy path, retry, rate-limit, truncated log |
 
 **Key test helpers:**
+
 ```python
 def _dados_mocao_validos(**overrides) -> dict   # valid AI response dict
 def _dest_simples(**overrides) -> dict           # minimal recipient dict
@@ -301,14 +318,17 @@ def _make_ai_response(payload: dict) -> MagicMock  # fake Gemini response
 Output: `dist\AutoOficios.exe` (~46 MB, single file, no console window).
 
 **To distribute**, give users a folder with:
-```
+
+```text
 AutoOficios.exe
 modelo_oficio.docx
 config.json
 ```
+
 The app creates `proposituras/`, `oficios_gerados/`, `planilha_gerada/`, `logs/` automatically on first run in the same directory.
 
 **Spec notes:**
+
 - Entry point: `ui.py`
 - Bundled data: `customtkinter/` themes, `babel/locale-data/` (pt_BR calendar), `babel/global.dat`
 - `console=False` — no terminal window appears
@@ -319,7 +339,7 @@ The app creates `proposituras/`, `oficios_gerados/`, `planilha_gerada/`, `logs/`
 ## 10. Known Issues & Pending Work
 
 | # | Issue | Priority | Status |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1 | `año` suffix in filename hardcoded: `-26` | High | **Pending** — must use `year % 100` from selected date |
 | 2 | `.doc` reading: `word.Quit()` in `finally` crashes if `Dispatch()` threw | Medium | **Pending** |
 | 3 | Author not in `MAPA_AUTORES` → silent `"INDEF"` with no user warning | Medium | **Pending** |

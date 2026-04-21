@@ -420,7 +420,8 @@ def formatar_autores(lista_autores: list[str]) -> tuple[str, str]:
     
     for autor in lista_autores:
         # Busca a sigla no mapa ignorando maiúsculas/minúsculas
-        sigla = next((s for nome_l, s in _MAPA_AUTORES_ITENS if nome_l in autor.lower()), "indef")
+        autor_lower = autor.lower()
+        sigla = next((s for nome_l, s in _MAPA_AUTORES_ITENS if nome_l in autor_lower), "indef")
         siglas.append(sigla.upper())
         nomes_limpos.append(autor)
         
