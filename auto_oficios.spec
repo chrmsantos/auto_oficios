@@ -86,7 +86,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="AutoOficios",
+    name="ZWaveOfficeLetters",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

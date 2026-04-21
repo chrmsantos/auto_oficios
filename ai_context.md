@@ -1,4 +1,4 @@
-# AI Context — Auto Ofícios
+# AI Context — ZWave OfficeLetters
 
 > This file is the single source of truth for any AI assistant or developer working on this project.
 > Keep it updated whenever the architecture, business rules, or conventions change.
@@ -7,7 +7,7 @@
 
 ## 1. Project Purpose
 
-**Auto Ofícios** is a Windows desktop app that automates the generation of legislative letters ("ofícios") for the Câmara Municipal de Santa Bárbara d'Oeste/SP.
+**ZWave OfficeLetters** is a Windows desktop app that automates the generation of legislative letters ("ofícios") for the Câmara Municipal de Santa Bárbara d'Oeste/SP.
 
 Workflow:
 1. User places a `.txt`/`.docx`/`.pdf`/`.odt` file containing one or more *moções* (legislative motions) in `proposituras/`.

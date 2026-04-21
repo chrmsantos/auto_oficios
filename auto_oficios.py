@@ -6,7 +6,6 @@ import time
 import types
 import uuid
 import logging
-import keyring
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -17,6 +16,11 @@ from typing import Any, cast
 # =============================================================================
 # CONFIGURAÇÕES GERAIS
 # =============================================================================
+# Identificação do produto
+APP_NAME    = "ZWave OfficeLetters"
+APP_VERSION = "1.6.0-beta1"
+APP_AUTHOR  = "Christian Martin dos Santos"
+
 # Configurações de Negócio
 PASTA_SAIDA         = "oficios_gerados"
 PASTA_LOGS          = "logs"
@@ -47,6 +51,16 @@ def _carregar_config() -> dict:
 _CONFIG = _carregar_config()
 MAPA_AUTORES: dict[str, str] = _CONFIG["autores"]
 _PREFEITO: dict[str, str] = _CONFIG["prefeito"]
+
+# Pre-built author lookup — avoids repeated .lower() calls per author at runtime.
+_MAPA_AUTORES_ITENS: tuple[tuple[str, str], ...] = tuple(
+    (nome.lower(), sigla) for nome, sigla in MAPA_AUTORES.items()
+)
+
+# Pre-compiled regex patterns
+_RE_ANO_MOCAO     = re.compile(r'[-/]\d{2,4}$')
+_RE_NOME_INVALIDO = re.compile(r'[\\/*?:"<>|]')
+_RE_RETRY_DELAY   = re.compile(r'retry_delay\s*\{\s*seconds:\s*(\d+)')
 
 # =============================================================================
 # LOGGING
@@ -115,6 +129,7 @@ _KEYRING_USERNAME = "gemini_api_key"
 
 def _salvar_api_key_no_ambiente(chave: str) -> None:
     """Persiste a chave de API de forma criptografada no Windows Credential Manager."""
+    import keyring  # noqa: PLC0415 — lazy: evita 500ms de inicialização na importação do módulo
     keyring.set_password(_KEYRING_SERVICE, _KEYRING_USERNAME, chave)
     # Mantém a variável de ambiente na sessão atual para SDKs que lêem os.environ.
     os.environ["GEMINI_API_KEY"] = chave
@@ -123,6 +138,7 @@ def _salvar_api_key_no_ambiente(chave: str) -> None:
 
 def _carregar_api_key() -> str:
     """Recupera a chave de API do Windows Credential Manager."""
+    import keyring  # noqa: PLC0415
     return keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME) or ""
 
 
@@ -169,11 +185,10 @@ def listar_proposituras() -> list[Path]:
     if not pasta.is_dir():
         return []
 
-    formatos = set(_ORDEM_PREFERENCIA)
     vistos: dict[str, Path] = {}  # nome-base -> arquivo preferencial já escolhido
 
     for arq in sorted(pasta.iterdir()):
-        if arq.suffix.lower() not in formatos:
+        if arq.suffix.lower() not in _FORMATOS_SUPORTADOS:
             continue
         pref = Path(resolver_arquivo_preferencial(str(arq)))
         if pref.stem not in vistos:
@@ -186,6 +201,7 @@ def listar_proposituras() -> list[Path]:
 # RESOLUÇÃO DE FORMATO PREFERENCIAL
 # =============================================================================
 _ORDEM_PREFERENCIA = (".txt", ".docx", ".doc", ".odt", ".pdf")
+_FORMATOS_SUPORTADOS: frozenset[str] = frozenset(_ORDEM_PREFERENCIA)
 
 def resolver_arquivo_preferencial(caminho: str) -> str:
     """Dado um caminho de arquivo, verifica se existem variantes com o mesmo nome
@@ -271,7 +287,7 @@ def normalizar_numero_mocao(numero: str) -> str:
 
     Exemplos: '124/2026' → '124', '124-26' → '124', '124' → '124'.
     """
-    return re.sub(r'[-/]\d{2,4}$', '', numero).strip()
+    return _RE_ANO_MOCAO.sub('', numero).strip()
 
 
 def construir_nome_arquivo(
@@ -291,7 +307,7 @@ def construir_nome_arquivo(
         f"Moção de {tipo_mocao} nº {num_mocao}-{ano_2d} - "
         f"{envio.lower()} - {nome_dest} - {sigla_autores}.docx"
     )
-    return re.sub(r'[\\/*?:"<>|]', "", nome)
+    return _RE_NOME_INVALIDO.sub("", nome)
 
 
 def limpar_json_da_resposta(texto: str) -> str:
@@ -359,7 +375,7 @@ def extrair_dados_com_ia(texto_mocao: str, cliente_genai: Any) -> dict[str, Any]
             logger.debug(f"Resposta recebida (tentativa {tentativa + 1}).")
         except Exception as e:
             msg = str(e)
-            match = re.search(r'retry_delay\s*\{\s*seconds:\s*(\d+)', msg)
+            match = _RE_RETRY_DELAY.search(msg)
             espera = int(match.group(1)) + 2 if match else 60
             if '429' in msg:
                 logger.warning(
@@ -404,7 +420,7 @@ def formatar_autores(lista_autores: list[str]) -> tuple[str, str]:
     
     for autor in lista_autores:
         # Busca a sigla no mapa ignorando maiúsculas/minúsculas
-        sigla = next((s for nome, s in MAPA_AUTORES.items() if nome.lower() in autor.lower()), "indef")
+        sigla = next((s for nome_l, s in _MAPA_AUTORES_ITENS if nome_l in autor.lower()), "indef")
         siglas.append(sigla.upper())
         nomes_limpos.append(autor)
         

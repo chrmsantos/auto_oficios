@@ -1,5 +1,5 @@
 """
-ui.py — Interface gráfica para o Auto Ofícios.
+ui.py — Interface gráfica para o ZWave OfficeLetters.
 Execute:  python ui.py
 Requer:   customtkinter  (pip install customtkinter)
 """
@@ -38,6 +38,9 @@ _DARK: dict[str, str] = {
 }
 _C = _DARK
 
+# Pre-compiled regex — avoids recompiling on every processed batch
+_RE_MOCAO_SPLIT = re.compile(r'(?=MOCÃO Nº)')
+
 
 # =============================================================================
 # Main Application
@@ -45,7 +48,7 @@ _C = _DARK
 class AutoOficiosApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Auto Ofícios — Gerador Legislativo")
+        self.title(f"ZWave OfficeLetters v{_ao.APP_VERSION} — Gerador Legislativo")
         self.geometry("1140x720")
         self.minsize(920, 620)
         self.configure(fg_color=_C["bg"])
@@ -62,7 +65,8 @@ class AutoOficiosApp(ctk.CTk):
 
         _ao._migrar_chave_do_registro()
         self._build_ui()
-        self._refresh_proposituras()
+        self.after(0, self._refresh_proposituras)   # defer disk scan; window renders first
+        self.after(10, self._load_api_key_async)    # defer 538ms keyring init; window renders first
         self._poll_queue()
 
     # =========================================================================
@@ -93,14 +97,14 @@ class AutoOficiosApp(ctk.CTk):
 
         ctk.CTkLabel(
             title_frame,
-            text="🏛  AUTO OFÍCIOS",
+            text="🏙  ZWAVE OFFICELETTERS",
             font=ctk.CTkFont(size=22, weight="bold"),
             text_color=_C["text"],
         ).pack(side="left")
 
         ctk.CTkLabel(
             title_frame,
-            text="   Gerador de Ofícios Legislativos",
+            text=f"   Gerador de Ofícios Legislativos  •  v{_ao.APP_VERSION}",
             font=ctk.CTkFont(size=13),
             text_color=_C["dim"],
         ).pack(side="left", pady=4)
@@ -210,7 +214,7 @@ class AutoOficiosApp(ctk.CTk):
         api_frame.grid(row=12, column=0, sticky="ew", padx=20, pady=(0, 4))
         api_frame.grid_columnconfigure(0, weight=1)
 
-        env_key = _ao._carregar_api_key()
+        env_key = ""  # populated asynchronously after window renders; see _load_api_key_async
         self._apikey_var = ctk.StringVar(value=env_key)
         self._apikey_entry = ctk.CTkEntry(
             api_frame, textvariable=self._apikey_var,
@@ -230,9 +234,9 @@ class AutoOficiosApp(ctk.CTk):
 
         self._key_status = ctk.CTkLabel(
             self._left,
-            text="✔  Chave carregada do ambiente" if env_key else "⚠  Chave não configurada",
+            text="⚠  Chave não configurada",
             font=ctk.CTkFont(size=11),
-            text_color=_C["success"] if env_key else _C["warn"],
+            text_color=_C["warn"],
             anchor="w",
         )
         self._key_status.grid(row=13, column=0, sticky="w", padx=22, pady=(0, 6))
@@ -362,13 +366,21 @@ class AutoOficiosApp(ctk.CTk):
         footer.grid(row=2, column=0, columnspan=2, sticky="ew")
         footer.grid_propagate(False)
         footer.grid_columnconfigure(0, weight=1)
+        footer.grid_columnconfigure(1, weight=0)
 
         ctk.CTkLabel(
             footer,
-            text="Auto Ofícios  •  Câmara Municipal  •  Powered by Gemini AI",
+            text=f"ZWave OfficeLetters v{_ao.APP_VERSION}  •  Câmara Municipal  •  Powered by Gemini AI",
             font=ctk.CTkFont(size=10),
             text_color=_C["dim"],
-        ).grid(row=0, column=0, pady=6)
+        ).grid(row=0, column=0, sticky="w", padx=16, pady=6)
+
+        ctk.CTkLabel(
+            footer,
+            text=f"© {_ao.APP_AUTHOR}",
+            font=ctk.CTkFont(size=10),
+            text_color=_C["dim"],
+        ).grid(row=0, column=1, sticky="e", padx=16, pady=6)
 
     # =========================================================================
     # Widget helpers
@@ -404,6 +416,21 @@ class AutoOficiosApp(ctk.CTk):
             text_color=_C["success"] if has_key else _C["warn"],
         )
 
+    def _load_api_key_async(self) -> None:
+        """Loads the API key from Credential Manager in a background thread.
+
+        Deferred to after window renders so the ~540 ms keyring initialisation
+        does not block the UI from appearing.
+        """
+        def _fetch() -> None:
+            try:
+                key = _ao._carregar_api_key()
+            except Exception:
+                key = ""
+            self.after(0, lambda: self._apikey_var.set(key))
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
     def _step_num(self, delta: int) -> None:
         try:
             val = max(1, int(self._num_var.get()) + delta)
@@ -431,7 +458,7 @@ class AutoOficiosApp(ctk.CTk):
             year=current.year,
             month=current.month,
             day=current.day,
-            date_pattern="dd-mm-yyyy",
+            date_pattern="dd/mm/yyyy",
             background=_C["panel"],
             foreground=_C["text"],
             bordercolor=_C["border"],
@@ -610,7 +637,7 @@ class AutoOficiosApp(ctk.CTk):
             Q.put(("log", f"📂  Lendo: {Path(inputs['arquivo']).name}", "accent"))
             conteudo = _ao.ler_arquivo_mocoes(inputs["arquivo"])
 
-            textos = re.split(r'(?=MOÇÃO Nº)', conteudo)
+            textos = _RE_MOCAO_SPLIT.split(conteudo)
             textos = [t.strip() for t in textos if t.strip()]
             total = len(textos)
 
