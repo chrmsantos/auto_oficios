@@ -197,8 +197,8 @@ class AutoOficiosApp(ctk.CTk):
         super().__init__()
         self.withdraw()  # hidden until splash finishes
         self.title(f"ZWave OfficeLetters v{_ao.APP_VERSION} — Gerador Legislativo")
-        self.geometry("1140x720")
-        self.minsize(920, 620)
+        self.geometry("1140x680")
+        self.minsize(920, 580)
         self.configure(fg_color=_C["bg"])
 
         # Ícone da janela (quando executado como .py; o exe usa o ícone do spec)
@@ -232,14 +232,14 @@ class AutoOficiosApp(ctk.CTk):
 
     # ── Header ────────────────────────────────────────────────────────────────
     def _build_header(self) -> None:
-        hdr = ctk.CTkFrame(self, fg_color=_C["card"], corner_radius=0, height=68)
+        hdr = ctk.CTkFrame(self, fg_color=_C["card"], corner_radius=0, height=76)
         hdr.grid(row=0, column=0, columnspan=2, sticky="ew")
         hdr.grid_propagate(False)
         hdr.grid_columnconfigure(0, weight=1)
         hdr.grid_columnconfigure(1, weight=0)
 
         title_frame = ctk.CTkFrame(hdr, fg_color="transparent")
-        title_frame.grid(row=0, column=0, sticky="w", padx=24, pady=(10, 0))
+        title_frame.grid(row=0, column=0, sticky="w", padx=24, pady=(18, 0))
 
         ctk.CTkLabel(
             title_frame,
@@ -540,7 +540,7 @@ class AutoOficiosApp(ctk.CTk):
 
     # ── Footer ────────────────────────────────────────────────────────────────
     def _build_footer(self) -> None:
-        footer = ctk.CTkFrame(self, fg_color=_C["card"], corner_radius=0, height=30)
+        footer = ctk.CTkFrame(self, fg_color=_C["card"], corner_radius=0, height=42)
         footer.grid(row=2, column=0, columnspan=2, sticky="ew")
         footer.grid_propagate(False)
         footer.grid_columnconfigure(0, weight=1)
