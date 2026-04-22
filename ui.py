@@ -44,11 +44,158 @@ _RE_MOCAO_SPLIT = re.compile(r'(?=MOCÃO Nº)')
 
 
 # =============================================================================
+# Splash / loading window
+# =============================================================================
+class _SplashWindow(ctk.CTkToplevel):
+    """Frameless loading window shown while the app initialises."""
+
+    _STEPS = [
+        "Criando pastas e arquivos necessários…",
+        "Carregando chave API…",
+        "Carregando proposituras…",
+    ]
+
+    def __init__(self, master: ctk.CTk, on_ready: Any) -> None:
+        super().__init__(master)
+        self._on_ready = on_ready
+        self._cancelled = False
+
+        self.title(f"ZWave OfficeLetters v{_ao.APP_VERSION}")
+        self.geometry("400x260")
+        self.resizable(False, False)
+        self.grab_set()
+        self.lift()
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.configure(fg_color=_C["card"])
+
+        # ── Layout ────────────────────────────────────────────────────────────
+        outer = ctk.CTkFrame(self, fg_color=_C["card"], corner_radius=0)
+        outer.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(
+            outer, text="🏙  ZWAVE OFFICELETTERS",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color=_C["text"],
+        ).pack(pady=(30, 2))
+
+        ctk.CTkLabel(
+            outer, text=f"v{_ao.APP_VERSION}  •  Gerador de Ofícios Legislativos",
+            font=ctk.CTkFont(size=11),
+            text_color=_C["dim"],
+        ).pack()
+
+        ctk.CTkFrame(outer, height=1, fg_color=_C["border"]).pack(
+            fill="x", padx=30, pady=(16, 12)
+        )
+
+        self._prog_bar = ctk.CTkProgressBar(
+            outer, height=14, corner_radius=7,
+            progress_color=_C["accent"], fg_color=_C["panel"],
+        )
+        self._prog_bar.pack(fill="x", padx=30, pady=(0, 8))
+        self._prog_bar.set(0)
+
+        self._step_lbl = ctk.CTkLabel(
+            outer, text="Iniciando…",
+            font=ctk.CTkFont(size=11),
+            text_color=_C["dim"],
+        )
+        self._step_lbl.pack()
+
+        self._cancel_btn = ctk.CTkButton(
+            outer, text="Cancelar",
+            font=ctk.CTkFont(size=12),
+            height=34, width=110, corner_radius=8,
+            fg_color=_C["panel"], hover_color=_C["error"],
+            text_color=_C["error"],
+            border_width=1, border_color=_C["error"],
+            command=self._cancel,
+        )
+        self._cancel_btn.pack(pady=(14, 0))
+
+        # Centre on screen
+        self.update_idletasks()
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        self.geometry(f"400x260+{(sw - 400) // 2}+{(sh - 260) // 2}")
+
+        threading.Thread(target=self._run_init, daemon=True).start()
+
+    def _set_step(self, idx: int, text: str) -> None:
+        """Called from main thread via after()."""
+        self._prog_bar.set(idx / len(self._STEPS))
+        self._step_lbl.configure(text=text)
+
+    def _cancel(self) -> None:
+        self._cancelled = True
+        self._cancel_btn.configure(state="disabled", text="Cancelando…")
+        self.after(200, self.master.quit)
+
+    def _run_init(self) -> None:
+        """Background thread: runs each init step then signals the main thread."""
+        steps = self._STEPS
+
+        # Step 0 — directories and required files
+        self.after(0, self._set_step, 0, steps[0])
+        try:
+            for p in (_ao.PASTA_LOGS, _ao.PASTA_PROPOSITURAS,
+                      _ao.PASTA_SAIDA, _ao.PASTA_PLANILHA):
+                Path(p).mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        # Auto-create modelo_planilha.xlsx if missing
+        try:
+            import sys as _sys
+            if getattr(_sys, "frozen", False):
+                _modelo = Path(_sys.executable).parent / _ao.MODELO_PLANILHA
+            else:
+                _modelo = Path(__file__).parent / _ao.MODELO_PLANILHA
+            if not _modelo.exists():
+                _ao.criar_modelo_planilha(_modelo)
+        except Exception:
+            pass
+        if self._cancelled:
+            return
+
+        # Step 1 — API key
+        self.after(0, self._set_step, 1, steps[1])
+        try:
+            _ao._migrar_chave_do_registro()
+            loaded_key = _ao._carregar_api_key()
+        except Exception:
+            loaded_key = ""
+        if self._cancelled:
+            return
+
+        # Step 2 — proposituras
+        self.after(0, self._set_step, 2, steps[2])
+        try:
+            prop_files_list = _ao.listar_proposituras()
+        except Exception:
+            prop_files_list = []
+        if self._cancelled:
+            return
+
+        self.after(0, self._finish, loaded_key, prop_files_list)
+
+    def _finish(self, loaded_key: str, prop_files_list: list) -> None:
+        self._prog_bar.set(1.0)
+        self._prog_bar.configure(progress_color=_C["success"])
+        self._step_lbl.configure(text="Pronto!", text_color=_C["success"])
+
+        def _handoff() -> None:
+            self.destroy()
+            self._on_ready(loaded_key, prop_files_list)
+
+        self.master.after(400, _handoff)
+
+
+# =============================================================================
 # Main Application
 # =============================================================================
 class AutoOficiosApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
+        self.withdraw()  # hidden until splash finishes
         self.title(f"ZWave OfficeLetters v{_ao.APP_VERSION} — Gerador Legislativo")
         self.geometry("1140x720")
         self.minsize(920, 620)
@@ -65,8 +212,7 @@ class AutoOficiosApp(ctk.CTk):
         self._prop_files: dict[str, str] = {}
 
         self._build_ui()
-        self.after(0, self._refresh_proposituras)   # defer disk scan; window renders first
-        self.after(10, self._load_api_key_async)    # defer registry/keyring init; window renders first
+        _SplashWindow(self, self._on_splash_ready)
         self._poll_queue()
 
     # =========================================================================
@@ -470,6 +616,19 @@ class AutoOficiosApp(ctk.CTk):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
+    def _on_splash_ready(self, loaded_key: str, prop_files_list: list) -> None:
+        """Called by the splash once all init steps complete. Populates UI and shows window."""
+        self._apikey_var.set(loaded_key)
+        self._prop_files = {p.name: str(p) for p in prop_files_list}
+        names = list(self._prop_files.keys())
+        self._prop_combo.configure(values=names)
+        if names:
+            self._prop_combo.set(names[0])
+        else:
+            self._prop_combo.set("(nenhum arquivo em proposituras)")
+        self.deiconify()
+        self.focus_force()
+
     def _step_num(self, delta: int) -> None:
         try:
             val = max(1, int(self._num_var.get()) + delta)
@@ -718,8 +877,12 @@ class AutoOficiosApp(ctk.CTk):
             Q.put(("progress", 0, total))
 
             Path(_ao.PASTA_SAIDA).mkdir(parents=True, exist_ok=True)
-            if not Path("modelo_oficio.docx").exists():
-                Q.put(("error", "Arquivo 'modelo_oficio.docx' não encontrado."))
+            if getattr(sys, "frozen", False):
+                _modelo_oficio = Path(sys.executable).parent / "modelo_oficio.docx"
+            else:
+                _modelo_oficio = Path(__file__).parent / "modelo_oficio.docx"
+            if not _modelo_oficio.exists():
+                Q.put(("error", f"Arquivo 'modelo_oficio.docx' n\u00e3o encontrado.\n{_modelo_oficio}"))
                 return
 
             dados_planilha: list[list[str]] = []
@@ -763,7 +926,7 @@ class AutoOficiosApp(ctk.CTk):
                         "destinatario_endereco": info["destinatario_endereco"],
                     }
 
-                    doc = DocxTemplate("modelo_oficio.docx")
+                    doc = DocxTemplate(str(_modelo_oficio))
                     doc.render(ctx)
 
                     nome = _ao.construir_nome_arquivo(
