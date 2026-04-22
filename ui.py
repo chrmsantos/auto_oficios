@@ -11,6 +11,7 @@ import re
 import sys
 import threading
 import time
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -545,6 +546,7 @@ class AutoOficiosApp(ctk.CTk):
         footer.grid_propagate(False)
         footer.grid_columnconfigure(0, weight=1)
         footer.grid_columnconfigure(1, weight=0)
+        footer.grid_columnconfigure(2, weight=0)
 
         ctk.CTkLabel(
             footer,
@@ -553,12 +555,25 @@ class AutoOficiosApp(ctk.CTk):
             text_color=_C["dim"],
         ).grid(row=0, column=0, sticky="w", padx=16, pady=6)
 
+        ctk.CTkButton(
+            footer,
+            text="👨‍💻  Repositório",
+            font=ctk.CTkFont(size=10),
+            width=110, height=26, corner_radius=6,
+            fg_color="transparent",
+            border_width=1,
+            border_color=_C["border"],
+            text_color=_C["dim"],
+            hover_color=_C["bg"],
+            command=lambda: webbrowser.open("https://github.com/chrmsantos/auto_oficios"),
+        ).grid(row=0, column=1, sticky="e", padx=(0, 8), pady=6)
+
         ctk.CTkLabel(
             footer,
             text=f"© {_ao.APP_AUTHOR}",
             font=ctk.CTkFont(size=10),
             text_color=_C["dim"],
-        ).grid(row=0, column=1, sticky="e", padx=16, pady=6)
+        ).grid(row=0, column=2, sticky="e", padx=16, pady=6)
 
     # =========================================================================
     # Widget helpers
