@@ -26,6 +26,7 @@ PASTA_SAIDA         = "oficios_gerados"
 PASTA_LOGS          = "logs"
 PASTA_PROPOSITURAS  = "proposituras"
 PASTA_PLANILHA      = "planilha_gerada"
+MODELO_PLANILHA     = "modelo_planilha.xlsx"
 
 # Identificador único desta sessão — incluído em todos os registros de log.
 SESSAO_ID = uuid.uuid4().hex[:8]
@@ -492,6 +493,54 @@ def processar_destinatario(dest: dict[str, Any]) -> dict[str, str]:
         "pronome_corpo": "Vossa Senhoria",
         "envio": envio
     }
+
+def criar_modelo_planilha(destino: "str | Path | None" = None) -> Path:
+    """Cria modelo_planilha.xlsx com cabeçalhos formatados e colunas dimensionadas.
+
+    Parâmetros
+    ----------
+    destino : caminho do arquivo a criar. Se None, usa o diretório da
+              aplicação (compatível com PyInstaller e modo dev).
+
+    Retorna o caminho do arquivo criado.
+    """
+    from openpyxl import Workbook  # lazy — sem impacto nos testes
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    if destino is None:
+        if getattr(sys, "frozen", False):
+            destino = Path(sys.executable).parent / MODELO_PLANILHA
+        else:
+            destino = Path(__file__).parent / MODELO_PLANILHA
+    destino = Path(destino)
+
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Controle"
+
+    cabecalhos = ["Of. n.º", "Data", "Destinatário", "Assunto", "Vereador", "Envio", "Autor"]
+    ws.append(cabecalhos)
+
+    fill  = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+    fonte = Font(bold=True, color="FFFFFF", size=11)
+    alin  = Alignment(horizontal="center", vertical="center", wrap_text=False)
+
+    for cell in ws[1]:
+        cell.fill      = fill
+        cell.font      = fonte
+        cell.alignment = alin
+
+    larguras = {"A": 10, "B": 12, "C": 32, "D": 54, "E": 32, "F": 14, "G": 10}
+    for col, width in larguras.items():
+        ws.column_dimensions[col].width = width
+
+    ws.row_dimensions[1].height = 22
+    ws.freeze_panes = "A2"
+
+    wb.save(str(destino))
+    return destino
+
 
 if __name__ == "__main__":
     from ui import AutoOficiosApp

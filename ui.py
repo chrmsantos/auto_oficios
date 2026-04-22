@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import queue
 import re
+import sys
 import threading
 import time
 from datetime import datetime
@@ -215,6 +216,7 @@ class AutoOficiosApp(ctk.CTk):
 
         env_key = ""  # populated asynchronously after window renders; see _load_api_key_async
         self._apikey_var = ctk.StringVar(value=env_key)
+        self._apikey_visible = False
         self._apikey_entry = ctk.CTkEntry(
             api_frame, textvariable=self._apikey_var,
             placeholder_text="Cole sua chave aqui…",
@@ -262,8 +264,29 @@ class AutoOficiosApp(ctk.CTk):
             border_width=1, border_color=_C["error"],
             command=self._request_cancel,
         )
-        self._cancel_btn.grid(row=16, column=0, sticky="ew", padx=20, pady=(0, 22))
+        self._cancel_btn.grid(row=16, column=0, sticky="ew", padx=20, pady=(0, 10))
         self._cancel_btn.grid_remove()  # hidden until processing starts
+
+        modelos_frame = ctk.CTkFrame(self._left, fg_color="transparent")
+        modelos_frame.grid(row=17, column=0, sticky="ew", padx=20, pady=(0, 18))
+        modelos_frame.grid_columnconfigure(0, weight=1)
+        modelos_frame.grid_columnconfigure(1, weight=1)
+
+        _btn_kw: dict[str, Any] = dict(
+            font=ctk.CTkFont(size=12),
+            height=34, corner_radius=10,
+            fg_color=_C["panel"], hover_color=_C["border"],
+            text_color=_C["dim"],
+            border_width=1, border_color=_C["border"],
+        )
+        ctk.CTkButton(
+            modelos_frame, text="📝  Ofício",
+            command=self._open_modelo_oficio, **_btn_kw,
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        ctk.CTkButton(
+            modelos_frame, text="📈  Planilha",
+            command=self._open_modelo_planilha, **_btn_kw,
+        ).grid(row=0, column=1, sticky="ew", padx=(3, 0))
 
     # ── Right Panel (log + results) ───────────────────────────────────────────
     def _build_right_panel(self) -> None:
@@ -379,7 +402,7 @@ class AutoOficiosApp(ctk.CTk):
 
         ctk.CTkLabel(
             footer,
-            text=f"ZWave OfficeLetters v{_ao.APP_VERSION}  •  Câmara Municipal  •  Powered by Gemini AI",
+            text=f"ZWave OfficeLetters v{_ao.APP_VERSION}  •  Câmara Municipal de Santa Bárbara d'Oeste/SP  •  Powered by Gemini AI",
             font=ctk.CTkFont(size=10),
             text_color=_C["dim"],
         ).grid(row=0, column=0, sticky="w", padx=16, pady=6)
@@ -507,9 +530,8 @@ class AutoOficiosApp(ctk.CTk):
         popup.geometry(f"+{x}+{y}")
 
     def _toggle_key_visibility(self) -> None:
-        self._apikey_entry.configure(
-            show="" if self._apikey_entry.cget("show") else "•"
-        )
+        self._apikey_visible = not self._apikey_visible
+        self._apikey_entry.configure(show="" if self._apikey_visible else "•")
 
     def _refresh_proposituras(self) -> None:
         from auto_oficios import listar_proposituras  # lazy import
@@ -538,6 +560,33 @@ class AutoOficiosApp(ctk.CTk):
             if name not in vals:
                 self._prop_combo.configure(values=list(vals) + [name])
             self._prop_combo.set(name)
+
+    def _open_modelo_oficio(self) -> None:
+        if getattr(sys, "frozen", False):
+            modelo = Path(sys.executable).parent / "modelo_oficio.docx"
+        else:
+            modelo = Path(__file__).parent / "modelo_oficio.docx"
+        if not modelo.exists():
+            messagebox.showwarning(
+                "Modelo não encontrado",
+                f"O arquivo não foi encontrado:\n{modelo}\n\n"
+                "Crie o arquivo modelo_oficio.docx na mesma pasta do aplicativo e tente novamente.",
+            )
+            return
+        os.startfile(str(modelo))
+
+    def _open_modelo_planilha(self) -> None:
+        if getattr(sys, "frozen", False):
+            modelo = Path(sys.executable).parent / _ao.MODELO_PLANILHA
+        else:
+            modelo = Path(__file__).parent / _ao.MODELO_PLANILHA
+        if not modelo.exists():
+            try:
+                _ao.criar_modelo_planilha(modelo)
+            except Exception as exc:
+                messagebox.showerror("Erro", f"Não foi possível criar o modelo:\n{exc}")
+                return
+        os.startfile(str(modelo))
 
     def _open_output_folder(self) -> None:
         from auto_oficios import PASTA_SAIDA
@@ -735,12 +784,22 @@ class AutoOficiosApp(ctk.CTk):
 
             # Excel spreadsheet
             Q.put(("log", "\n📊  Gerando planilha Excel…", "accent"))
-            wb = Workbook()
-            ws = wb.active
-            assert ws is not None
+            if getattr(sys, "frozen", False):
+                _modelo_xlsx = Path(sys.executable).parent / _ao.MODELO_PLANILHA
+            else:
+                _modelo_xlsx = Path(__file__).parent / _ao.MODELO_PLANILHA
+            if _modelo_xlsx.exists():
+                from openpyxl import load_workbook
+                wb = load_workbook(str(_modelo_xlsx))
+                ws = wb.active
+                assert ws is not None
+            else:
+                wb = Workbook()
+                ws = wb.active
+                assert ws is not None
+                ws.append(["Of. n.º", "Data", "Destinatário", "Assunto",
+                            "Vereador", "Envio", "Autor"])
             ws.title = f"Controle {year}"
-            ws.append(["Of. n.º", "Data", "Destinatário", "Assunto",
-                        "Vereador", "Envio", "Autor"])
             for row in dados_planilha:
                 ws.append(row)
             Path(_ao.PASTA_PLANILHA).mkdir(exist_ok=True)
