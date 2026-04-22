@@ -588,7 +588,7 @@ class AutoOficiosApp(ctk.CTk):
     # Interactions
     # =========================================================================
     def _on_apikey_changed(self, *_: Any) -> None:
-        has_key = bool(self._apikey_var.get().strip())
+        has_key = bool(self._apikey_var.get().strip()) or bool(getattr(self, "_stored_key", ""))
         self._key_status.configure(
             text="✔  Chave configurada" if has_key else "⚠  Chave não configurada",
             text_color=_C["success"] if has_key else _C["warn"],
@@ -607,13 +607,18 @@ class AutoOficiosApp(ctk.CTk):
                 key = _ao._carregar_api_key()
             except Exception:
                 key = ""
-            self.after(0, lambda: self._apikey_var.set(key))
+            self.after(0, lambda k=key: self._apply_stored_key(k))
 
         threading.Thread(target=_fetch, daemon=True).start()
 
+    def _apply_stored_key(self, key: str) -> None:
+        """Stores the loaded key internally without exposing it in the entry field."""
+        self._stored_key = key
+        self._on_apikey_changed()
+
     def _on_splash_ready(self, loaded_key: str, prop_files_list: list) -> None:
         """Called by the splash once all init steps complete. Populates UI and shows window."""
-        self._apikey_var.set(loaded_key)
+        self._apply_stored_key(loaded_key)
         self._prop_files = {p.name: str(p) for p in prop_files_list}
         names = list(self._prop_files.keys())
         self._prop_combo.configure(values=names)
@@ -808,7 +813,7 @@ class AutoOficiosApp(ctk.CTk):
                                  "Selecione um arquivo de propositura válido.")
             return
 
-        api_key = self._apikey_var.get().strip()
+        api_key = self._apikey_var.get().strip() or getattr(self, "_stored_key", "")
         if not api_key:
             messagebox.showerror("Erro de Validação", "Informe a chave da API Gemini.")
             return
