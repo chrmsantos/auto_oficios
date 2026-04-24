@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import auto_oficios
 from auto_oficios import (
-    _carregar_api_key,
-    _migrar_chave_do_registro,
+    carregar_api_key,
+    migrar_chave_do_registro,
     _salvar_api_key_no_ambiente,
     configurar_logging,
     construir_nome_arquivo,
@@ -660,16 +660,16 @@ class TestCarregarApiKey:
 
     def test_retorna_chave_do_keyring(self):
         with patch("keyring.get_password", return_value="chave-secreta"):
-            assert _carregar_api_key() == "chave-secreta"
+            assert carregar_api_key() == "chave-secreta"
 
     def test_retorna_string_vazia_quando_nao_ha_chave(self):
         with patch("keyring.get_password", return_value=None):
-            assert _carregar_api_key() == ""
+            assert carregar_api_key() == ""
 
     def test_consulta_servico_e_usuario_corretos(self):
         with patch("keyring.get_password") as mock_get:
             mock_get.return_value = "k"
-            _carregar_api_key()
+            carregar_api_key()
             mock_get.assert_called_once_with(
                 auto_oficios._KEYRING_SERVICE,
                 auto_oficios._KEYRING_USERNAME,
@@ -708,21 +708,21 @@ class TestMigrarChaveDoRegistro:
     def test_migra_chave_existente(self):
         p_open, p_query, p_delete, p_set, _ = self._patch_winreg("chave-antiga")
         with p_open, p_query, p_delete as mock_del, p_set as mock_set:
-            _migrar_chave_do_registro()
+            migrar_chave_do_registro()
             mock_set.assert_called_once()
             mock_del.assert_called_once()
 
     def test_nao_faz_nada_se_chave_ausente(self):
         p_open, p_query, p_delete, p_set, _ = self._patch_winreg(None)
         with p_open, p_query, p_delete as mock_del, p_set as mock_set:
-            _migrar_chave_do_registro()
+            migrar_chave_do_registro()
             mock_set.assert_not_called()
             mock_del.assert_not_called()
 
     def test_tolerante_a_falha_no_registro(self, caplog):
         with patch("winreg.OpenKey", side_effect=OSError("sem acesso")), \
                 caplog.at_level(logging.WARNING, logger="auto_oficios"):
-            _migrar_chave_do_registro()  # must not raise
+            migrar_chave_do_registro()  # must not raise
         assert any("Falha" in r.message for r in caplog.records)
 
 

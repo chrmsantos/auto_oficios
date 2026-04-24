@@ -197,13 +197,13 @@ def _salvar_api_key_no_ambiente(chave: str) -> None:
     logger.info("GEMINI_API_KEY persistida no Credential Manager do Windows.")
 
 
-def _carregar_api_key() -> str:
+def carregar_api_key() -> str:
     """Recupera a chave de API do Windows Credential Manager."""
     import keyring  # noqa: PLC0415
     return keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME) or ""
 
 
-def _migrar_chave_do_registro() -> None:
+def migrar_chave_do_registro() -> None:
     """Migra a chave em texto simples do registro do Windows para o Credential Manager.
 
     Na primeira execução após a atualização, lê o valor GEMINI_API_KEY do registro

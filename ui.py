@@ -329,7 +329,7 @@ class AutoOficiosApp(ctk.CTk):
         self._log_box.grid(row=4, column=0, sticky="nsew", padx=20, pady=(0, 10))
 
         # Colored tags on the underlying tk.Text widget
-        tb = self._log_box._textbox
+        tb = self._log_box._textbox  # type: ignore[reportPrivateUsage]
         tb.tag_config("success", foreground=_C["success"])
         tb.tag_config("error",   foreground=_C["error"])
         tb.tag_config("warn",    foreground=_C["warn"])
@@ -451,8 +451,8 @@ class AutoOficiosApp(ctk.CTk):
         """
         def _fetch() -> None:
             try:
-                _ao._migrar_chave_do_registro()  # no-op after first run
-                key = _ao._carregar_api_key()
+                _ao.migrar_chave_do_registro()  # no-op after first run
+                key = _ao.carregar_api_key()
             except Exception:
                 key = ""
             self.after(0, lambda k=key: self._apply_stored_key(k))
@@ -486,8 +486,8 @@ class AutoOficiosApp(ctk.CTk):
         # Step 1 — API key
         loaded_key = ""
         try:
-            _ao._migrar_chave_do_registro()
-            loaded_key = _ao._carregar_api_key()
+            _ao.migrar_chave_do_registro()
+            loaded_key = _ao.carregar_api_key()
         except Exception:
             pass
 
@@ -722,7 +722,7 @@ class AutoOficiosApp(ctk.CTk):
         if getattr(sys, "frozen", False):
             modelo = Path(sys.executable).parent / "modelo_oficio.docx"
             if not modelo.exists():
-                modelo = Path(sys._MEIPASS) / "modelo_oficio.docx"
+                modelo = Path(getattr(sys, "_MEIPASS", "")) / "modelo_oficio.docx"
         else:
             modelo = Path(__file__).parent / "modelo_oficio.docx"
         if not modelo.exists():
@@ -756,7 +756,7 @@ class AutoOficiosApp(ctk.CTk):
         if getattr(sys, "frozen", False):
             cfg_path = Path(sys.executable).parent / "config.json"
             if not cfg_path.exists():
-                _shutil.copy2(Path(sys._MEIPASS) / "config.json", cfg_path)
+                _shutil.copy2(Path(getattr(sys, "_MEIPASS", "")) / "config.json", cfg_path)
         else:
             cfg_path = Path(__file__).parent / "config.json"
 
@@ -1114,7 +1114,7 @@ class AutoOficiosApp(ctk.CTk):
     # Log helpers (must be called from main thread only)
     # =========================================================================
     def _log(self, text: str, tag: str = "") -> None:
-        tb = self._log_box._textbox  # bypass CTk configure overhead for state changes
+        tb = self._log_box._textbox  # type: ignore[reportPrivateUsage]  # bypass CTk configure overhead for state changes
         tb.configure(state="normal")
         if tag:
             tb.insert("end", text + "\n", tag)
@@ -1124,7 +1124,7 @@ class AutoOficiosApp(ctk.CTk):
         tb.configure(state="disabled")
 
     def _clear_log(self) -> None:
-        tb = self._log_box._textbox
+        tb = self._log_box._textbox  # type: ignore[reportPrivateUsage]
         tb.configure(state="normal")
         tb.delete("1.0", "end")
         tb.configure(state="disabled")
@@ -1226,7 +1226,7 @@ class AutoOficiosApp(ctk.CTk):
             if getattr(sys, "frozen", False):
                 _modelo_oficio = Path(sys.executable).parent / "modelo_oficio.docx"
                 if not _modelo_oficio.exists():
-                    _modelo_oficio = Path(sys._MEIPASS) / "modelo_oficio.docx"
+                    _modelo_oficio = Path(getattr(sys, "_MEIPASS", "")) / "modelo_oficio.docx"
             else:
                 _modelo_oficio = Path(__file__).parent / "modelo_oficio.docx"
             if not _modelo_oficio.exists():
