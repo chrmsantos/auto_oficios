@@ -18,7 +18,7 @@ from typing import Any, cast
 # =============================================================================
 # Identificação do produto
 APP_NAME    = "ZWave OfficeLetters"
-APP_VERSION = "2.0.0-alpha1"
+APP_VERSION = "2.0.0-alpha2"
 APP_AUTHOR  = "Christian Martin dos Santos"
 
 # Configurações de Negócio
@@ -98,7 +98,7 @@ def _carregar_config() -> dict:
         config_path = Path(sys.executable).parent / "config.json"
         if not config_path.exists():
             # 2) Fallback: config embutida no pacote PyInstaller (_MEIPASS)
-            config_path = Path(sys._MEIPASS) / "config.json"
+            config_path = Path(getattr(sys, "_MEIPASS", "")) / "config.json"
     else:
         config_path = Path(__file__).parent / "config.json"
     with open(config_path, encoding="utf-8") as f:
