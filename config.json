@@ -25,5 +25,14 @@
     "Tikinho TK":           "eac",
     "Wilson da Engenharia": "war"
   },
-  "vereadores_feminino": ["Esther Moraes"]
+  "vereadores_feminino": ["Esther Moraes"],
+  "redatores": {
+    "Alexandre José Carpim":          "ajc",
+    "Allan Fadel Vendemiato":         "afv",
+    "Bruno Rodrigues Argente":        "bra",
+    "Christian Martin dos Santos":    "cms",
+    "Henrique Macedo Guimarães":      "hmg",
+    "Luciana Curtes":                 "lc",
+    "Marta de Fátima Camargo Pedroso": "mfcp"
+  }
 }

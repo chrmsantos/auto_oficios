@@ -105,6 +105,7 @@ def _carregar_config() -> dict:
 
 _CONFIG = _carregar_config()
 MAPA_AUTORES: dict[str, str] = _CONFIG["autores"]
+MAPA_REDATORES: dict[str, str] = _CONFIG.get("redatores", {})
 _PREFEITO: dict[str, str] = _CONFIG["prefeito"]
 
 # Pre-built author lookup — avoids repeated .lower() calls per author at runtime.

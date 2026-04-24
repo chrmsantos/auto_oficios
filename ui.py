@@ -45,158 +45,11 @@ _RE_MOCAO_SPLIT = re.compile(r'(?=MOCÃO Nº)')
 
 
 # =============================================================================
-# Splash / loading window
-# =============================================================================
-class _SplashWindow(ctk.CTkToplevel):
-    """Frameless loading window shown while the app initialises."""
-
-    _STEPS = [
-        "Criando pastas e arquivos necessários…",
-        "Carregando chave API…",
-        "Carregando proposituras…",
-    ]
-
-    def __init__(self, master: ctk.CTk, on_ready: Any) -> None:
-        super().__init__(master)
-        self._on_ready = on_ready
-        self._cancelled = False
-
-        self.title(f"ZWave OfficeLetters v{_ao.APP_VERSION}")
-        self.geometry("400x260")
-        self.resizable(False, False)
-        self.grab_set()
-        self.lift()
-        self.protocol("WM_DELETE_WINDOW", self._cancel)
-        self.configure(fg_color=_C["card"])
-
-        # ── Layout ────────────────────────────────────────────────────────────
-        outer = ctk.CTkFrame(self, fg_color=_C["card"], corner_radius=0)
-        outer.pack(fill="both", expand=True)
-
-        ctk.CTkLabel(
-            outer, text="🏙  ZWAVE OFFICELETTERS",
-            font=ctk.CTkFont(size=20, weight="bold"),
-            text_color=_C["text"],
-        ).pack(pady=(30, 2))
-
-        ctk.CTkLabel(
-            outer, text=f"v{_ao.APP_VERSION}  •  Gerador de Ofícios Legislativos",
-            font=ctk.CTkFont(size=11),
-            text_color=_C["dim"],
-        ).pack()
-
-        ctk.CTkFrame(outer, height=1, fg_color=_C["border"]).pack(
-            fill="x", padx=30, pady=(16, 12)
-        )
-
-        self._prog_bar = ctk.CTkProgressBar(
-            outer, height=14, corner_radius=7,
-            progress_color=_C["accent"], fg_color=_C["panel"],
-        )
-        self._prog_bar.pack(fill="x", padx=30, pady=(0, 8))
-        self._prog_bar.set(0)
-
-        self._step_lbl = ctk.CTkLabel(
-            outer, text="Iniciando…",
-            font=ctk.CTkFont(size=11),
-            text_color=_C["dim"],
-        )
-        self._step_lbl.pack()
-
-        self._cancel_btn = ctk.CTkButton(
-            outer, text="Cancelar",
-            font=ctk.CTkFont(size=12),
-            height=34, width=110, corner_radius=8,
-            fg_color=_C["panel"], hover_color=_C["error"],
-            text_color=_C["error"],
-            border_width=1, border_color=_C["error"],
-            command=self._cancel,
-        )
-        self._cancel_btn.pack(pady=(14, 0))
-
-        # Centre on screen
-        self.update_idletasks()
-        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        self.geometry(f"400x260+{(sw - 400) // 2}+{(sh - 260) // 2}")
-
-        threading.Thread(target=self._run_init, daemon=True).start()
-
-    def _set_step(self, idx: int, text: str) -> None:
-        """Called from main thread via after()."""
-        self._prog_bar.set(idx / len(self._STEPS))
-        self._step_lbl.configure(text=text)
-
-    def _cancel(self) -> None:
-        self._cancelled = True
-        self._cancel_btn.configure(state="disabled", text="Cancelando…")
-        self.after(200, self.master.quit)
-
-    def _run_init(self) -> None:
-        """Background thread: runs each init step then signals the main thread."""
-        steps = self._STEPS
-
-        # Step 0 — directories and required files
-        self.after(0, self._set_step, 0, steps[0])
-        try:
-            for p in (_ao.PASTA_LOGS, _ao.PASTA_PROPOSITURAS,
-                      _ao.PASTA_SAIDA, _ao.PASTA_PLANILHA):
-                Path(p).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-        # Auto-create modelo_planilha.xlsx if missing
-        try:
-            import sys as _sys
-            if getattr(_sys, "frozen", False):
-                _modelo = Path(_sys.executable).parent / _ao.MODELO_PLANILHA
-            else:
-                _modelo = Path(__file__).parent / _ao.MODELO_PLANILHA
-            if not _modelo.exists():
-                _ao.criar_modelo_planilha(_modelo)
-        except Exception:
-            pass
-        if self._cancelled:
-            return
-
-        # Step 1 — API key
-        self.after(0, self._set_step, 1, steps[1])
-        try:
-            _ao._migrar_chave_do_registro()
-            loaded_key = _ao._carregar_api_key()
-        except Exception:
-            loaded_key = ""
-        if self._cancelled:
-            return
-
-        # Step 2 — proposituras
-        self.after(0, self._set_step, 2, steps[2])
-        try:
-            prop_files_list = _ao.listar_proposituras()
-        except Exception:
-            prop_files_list = []
-        if self._cancelled:
-            return
-
-        self.after(0, self._finish, loaded_key, prop_files_list)
-
-    def _finish(self, loaded_key: str, prop_files_list: list) -> None:
-        self._prog_bar.set(1.0)
-        self._prog_bar.configure(progress_color=_C["success"])
-        self._step_lbl.configure(text="Pronto!", text_color=_C["success"])
-
-        def _handoff() -> None:
-            self.destroy()
-            self._on_ready(loaded_key, prop_files_list)
-
-        self.master.after(400, _handoff)
-
-
-# =============================================================================
 # Main Application
 # =============================================================================
 class AutoOficiosApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
-        self.withdraw()  # hidden until splash finishes
         self.title(f"ZWave OfficeLetters v{_ao.APP_VERSION} — Gerador Legislativo")
         self.geometry("1140x680")
         self.minsize(920, 580)
@@ -213,7 +66,7 @@ class AutoOficiosApp(ctk.CTk):
         self._prop_files: dict[str, str] = {}
 
         self._build_ui()
-        _SplashWindow(self, self._on_splash_ready)
+        self._run_init_sync()
         self._poll_queue()
 
     # =========================================================================
@@ -280,7 +133,7 @@ class AutoOficiosApp(ctk.CTk):
             text_color=_C["text"], anchor="w",
         ).grid(row=0, column=0, sticky="w", pady=(0, 4))
         ctk.CTkLabel(
-            top_frame, text="Iniciais",
+            top_frame, text="Redator",
             font=ctk.CTkFont(size=12, weight="bold"),
             text_color=_C["text"], anchor="w",
         ).grid(row=0, column=1, sticky="w", padx=(8, 0), pady=(0, 4))
@@ -299,11 +152,16 @@ class AutoOficiosApp(ctk.CTk):
         self._num_entry.grid(row=1, column=0, sticky="ew")
 
         self._sigla_var = ctk.StringVar()
-        ctk.CTkEntry(
-            top_frame, textvariable=self._sigla_var,
-            placeholder_text="Ex: xyz",
-            font=ctk.CTkFont(size=15), height=42,
-        ).grid(row=1, column=1, sticky="ew", padx=(8, 0))
+        _redator_values = [
+            f"{n} ({s})" for n, s in _ao.MAPA_REDATORES.items()
+        ]
+        self._sigla_combo = ctk.CTkComboBox(
+            top_frame, variable=self._sigla_var,
+            values=_redator_values,
+            font=ctk.CTkFont(size=13), height=42,
+            command=self._on_redator_selected,
+        )
+        self._sigla_combo.grid(row=1, column=1, sticky="ew", padx=(8, 0))
 
         self._data_var = ctk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
         self._data_btn = ctk.CTkButton(
@@ -639,8 +497,44 @@ class AutoOficiosApp(ctk.CTk):
         self._stored_key = key
         self._on_apikey_changed()
 
+    def _run_init_sync(self) -> None:
+        """Runs the three init steps synchronously (fast: mkdir + registry + file scan)."""
+        # Step 0 — create required directories
+        try:
+            for p in (_ao.PASTA_LOGS, _ao.PASTA_PROPOSITURAS,
+                      _ao.PASTA_SAIDA, _ao.PASTA_PLANILHA):
+                Path(p).mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        try:
+            if getattr(sys, "frozen", False):
+                _modelo = Path(sys.executable).parent / _ao.MODELO_PLANILHA
+            else:
+                _modelo = Path(__file__).parent / _ao.MODELO_PLANILHA
+            if not _modelo.exists():
+                _ao.criar_modelo_planilha(_modelo)
+        except Exception:
+            pass
+
+        # Step 1 — API key
+        loaded_key = ""
+        try:
+            _ao._migrar_chave_do_registro()
+            loaded_key = _ao._carregar_api_key()
+        except Exception:
+            pass
+
+        # Step 2 — proposituras
+        prop_files_list: list = []
+        try:
+            prop_files_list = _ao.listar_proposituras()
+        except Exception:
+            pass
+
+        self._on_splash_ready(loaded_key, prop_files_list)
+
     def _on_splash_ready(self, loaded_key: str, prop_files_list: list) -> None:
-        """Called by the splash once all init steps complete. Populates UI and shows window."""
+        """Populates UI after init steps complete."""
         self._apply_stored_key(loaded_key)
         self._prop_files = {p.name: str(p) for p in prop_files_list}
         names = list(self._prop_files.keys())
@@ -649,8 +543,6 @@ class AutoOficiosApp(ctk.CTk):
             self._prop_combo.set(names[0])
         else:
             self._prop_combo.set("(nenhum arquivo em proposituras)")
-        self.deiconify()
-        self.focus_force()
 
     def _open_date_picker(self) -> None:
         from tkcalendar import Calendar  # lazy import
@@ -712,6 +604,18 @@ class AutoOficiosApp(ctk.CTk):
     def _toggle_key_visibility(self) -> None:
         self._apikey_visible = not self._apikey_visible
         self._apikey_entry.configure(show="" if self._apikey_visible else "•")
+
+    def _on_redator_selected(self, choice: str) -> None:
+        """Called when the user picks a redator from the dropdown.
+        Extracts the sigla from 'Nome Completo (sigla)' and stores it."""
+        m = re.search(r'\(([^)]+)\)$', choice)
+        if m:
+            self._sigla_var.set(m.group(1))
+
+    def _refresh_redator_combo(self) -> None:
+        """Updates the redator ComboBox values from the current MAPA_REDATORES."""
+        values = [f"{n} ({s})" for n, s in _ao.MAPA_REDATORES.items()]
+        self._sigla_combo.configure(values=values)
 
     def _refresh_proposituras(self) -> None:
         from auto_oficios import listar_proposituras  # lazy import
@@ -905,6 +809,61 @@ class AutoOficiosApp(ctk.CTk):
                       command=lambda: _add_row(focus=True),
         ).grid(row=9, column=0, sticky="w", padx=20, pady=(8, 18))
 
+        # ── REDATORES ─────────────────────────────────────────────────────────
+        _sec("REDATORES", 10)
+
+        redatores_wrap = ctk.CTkFrame(scroll, fg_color="transparent")
+        redatores_wrap.grid(row=12, column=0, sticky="ew", padx=20)
+
+        # Column header row
+        rhdr = ctk.CTkFrame(redatores_wrap, fg_color="transparent")
+        rhdr.pack(fill="x", pady=(0, 4))
+        ctk.CTkLabel(rhdr, text="Nome", font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=_C["dim"]).pack(side="left")
+        ctk.CTkLabel(rhdr, text="Sigla", font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=_C["dim"], width=76).pack(side="left", padx=(6, 0))
+
+        rrows_frame = ctk.CTkFrame(redatores_wrap, fg_color="transparent")
+        rrows_frame.pack(fill="x")
+
+        redator_rows: list[dict] = []
+
+        def _add_redator_row(nome: str = "", sigla: str = "",
+                             focus: bool = False) -> None:
+            rf = ctk.CTkFrame(rrows_frame, fg_color="transparent")
+            rf.pack(fill="x", pady=2)
+            nv = ctk.StringVar(value=nome)
+            sv = ctk.StringVar(value=sigla)
+            ne = ctk.CTkEntry(rf, textvariable=nv, font=ctk.CTkFont(size=12), height=34)
+            ne.pack(side="left", fill="x", expand=True)
+            ctk.CTkEntry(rf, textvariable=sv, width=76,
+                         font=ctk.CTkFont(size=12), height=34).pack(side="left", padx=(6, 0))
+            rd2: dict = {"nv": nv, "sv": sv}
+
+            def _del_r() -> None:
+                redator_rows.remove(rd2)
+                rf.destroy()
+
+            ctk.CTkButton(rf, text="✕", width=28, height=34,
+                          font=ctk.CTkFont(size=11),
+                          fg_color="transparent", hover_color=_C["error"],
+                          text_color=_C["dim"], border_width=0,
+                          command=_del_r,
+            ).pack(side="left", padx=(4, 0))
+            redator_rows.append(rd2)
+            if focus:
+                ne.focus_set()
+
+        for _rn, _rs in cfg.get("redatores", {}).items():
+            _add_redator_row(_rn, _rs)
+
+        ctk.CTkButton(scroll, text="＋  Adicionar Redator",
+                      font=ctk.CTkFont(size=12), height=32, corner_radius=8,
+                      fg_color=_C["panel"], hover_color=_C["border"],
+                      text_color=_C["accent"], border_width=1, border_color=_C["border"],
+                      command=lambda: _add_redator_row(focus=True),
+        ).grid(row=13, column=0, sticky="w", padx=20, pady=(8, 18))
+
         # ── Save / Cancel ─────────────────────────────────────────────────────
         def _save() -> None:
             autores: dict[str, str] = {}
@@ -917,6 +876,13 @@ class AutoOficiosApp(ctk.CTk):
                     if rd["fv"].get():
                         new_fem.append(n)
 
+            redatores: dict[str, str] = {}
+            for rd2 in redator_rows:
+                n = rd2["nv"].get().strip()
+                s = rd2["sv"].get().strip()
+                if n and s:
+                    redatores[n] = s
+
             new_cfg = {
                 "_comentario": cfg.get("_comentario", ""),
                 "prefeito": {
@@ -925,6 +891,7 @@ class AutoOficiosApp(ctk.CTk):
                 },
                 "autores": autores,
                 "vereadores_feminino": new_fem,
+                "redatores": redatores,
             }
             try:
                 with open(cfg_path, "w", encoding="utf-8") as f:
@@ -937,6 +904,7 @@ class AutoOficiosApp(ctk.CTk):
             try:
                 reloaded = _ao._carregar_config()
                 _ao.MAPA_AUTORES = reloaded["autores"]
+                _ao.MAPA_REDATORES = reloaded.get("redatores", {})
                 _ao._PREFEITO = reloaded["prefeito"]
                 _ao._MAPA_AUTORES_ITENS = tuple(
                     (n.lower(), s) for n, s in reloaded["autores"].items()
@@ -944,6 +912,7 @@ class AutoOficiosApp(ctk.CTk):
                 _ao._VEREADORES_FEMININO_LOWER = frozenset(
                     n.lower() for n in reloaded.get("vereadores_feminino", [])
                 )
+                self._refresh_redator_combo()
             except Exception:
                 pass
 
