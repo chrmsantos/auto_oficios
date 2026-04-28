@@ -71,6 +71,7 @@ class AutoOficiosApp(ctk.CTk):
         self.minsize(920, 580)
         self.configure(fg_color=_C["bg"])
         self._maximize_on_startup()
+        self.after(0, self._maximize_on_startup)
 
         # Ícone da janela (quando executado como .py; o exe usa o ícone do spec)
         _icon = Path(__file__).parent / "icon.ico"
@@ -494,7 +495,10 @@ class AutoOficiosApp(ctk.CTk):
         if self._processing:
             return
 
-        # Save log content before destroying widgets
+        # Save field values and log content before destroying widgets
+        saved_num = self._num_var.get()
+        saved_sigla = self._sigla_var.get()
+        saved_data = self._data_var.get()
         try:
             tb = self._log_box._textbox  # type: ignore[reportPrivateUsage]
             log_text = tb.get("1.0", "end-1c")
@@ -521,6 +525,11 @@ class AutoOficiosApp(ctk.CTk):
 
         # Rebuild all UI panels with the new palette
         self._build_ui()
+
+        # Restore field values after rebuild
+        self._num_var.set(saved_num)
+        self._sigla_var.set(saved_sigla)
+        self._data_var.set(saved_data)
 
         # Restore proposituras listbox from preserved list
         self._prop_listbox.delete(0, tk.END)
@@ -1656,6 +1665,7 @@ class AutoOficiosApp(ctk.CTk):
                 text=f"✔  {generated} ofício(s) gerado(s)   •   {errors} erro(s)   •   ⏱ {tempo}",
                 text_color=color,
             )
+            self._save_session_state()
 
         elif kind == "cancelled":
             done_so_far, total = msg[1], msg[2]
@@ -1666,6 +1676,7 @@ class AutoOficiosApp(ctk.CTk):
             self._progress.configure(progress_color=_C["warn"])
             self._prog_label.configure(text=f"Cancelado após {done_so_far} de {total} moções.", text_color=_C["warn"])
             self._log(f"\n⏹  Processamento cancelado após {done_so_far}/{total} moções.", "warn")
+            self._save_session_state()
 
         elif kind == "error":
             self._processing = False
