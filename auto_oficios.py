@@ -48,12 +48,12 @@ _PROMPT_TEMPLATE_PADRAO: str = (
     "    \n"
     "    Formato JSON esperado:\n"
     "    {\n"
-    '        "tipo_mocao": "Aplauso" ou "Apelo",\n'
-    '        "numero_mocao": "124",\n'
+    '        "tipo_mocao": "Apelo", "Aplauso", "Apoio" ou "Protesto",\n'
+    '        "numero_mocao": "Ex: 432",\n'
     '        "autores": ["Nome do Vereador 1", "Nome do Vereador 2"],\n'
     '        "destinatarios": [\n'
     "            {\n"
-    '                "nome": "Nome da pessoa ou instituição",\n'
+    '                "nome": "NOME DA PESSOA OU INSTITUIÇÃO",\n'
     '                "cargo_ou_tratamento": "Ex: Presidente da CDHU / Aos cuidados de...",\n'
     '                "endereco": "Endereço completo se houver no texto, senão vazio",\n'
     '                "email": "Email se houver, senão vazio",\n'
