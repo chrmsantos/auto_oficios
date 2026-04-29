@@ -82,7 +82,7 @@ officelatters/
 ├── logs/                    # Log files (rotating, per-session)
 │
 ├── tests/
-│   └── test_auto_oficios.py # 122 unit tests
+│   └── test_auto_oficios.py # 123 unit tests
 │
 ├── dist/
 │   └── Z7_OfficeLetters.exe # Compiled standalone executable
@@ -124,8 +124,9 @@ MESES_PT           = {1: "janeiro", ..., 12: "dezembro"}
 | `validar_dados_mocao` | `(dados: dict) -> None` | Validates required fields. Raises `ValueError` on failure. |
 | `extrair_dados_com_ia` | `(texto_mocao, cliente_genai) -> dict` | Sends text to Gemini, retries up to 5×. Handles rate-limit (429) with `time.sleep`. |
 | `normalizar_numero_mocao` | `(numero: str) -> str` | Strips year suffixes: `"124/2026" → "124"`. |
-| `construir_nome_arquivo` | `(num_oficio_str, sigla_servidor, tipo_mocao, num_mocao, envio, nome_dest, sigla_autores) -> str` | Builds `.docx` filename. Strips Windows-illegal chars (`\/*?:"<>\|`). Appends `-{year_2digit}` to moção number. |
-| `formatar_autores` | `(lista_autores: list[str]) -> tuple[str, str]` | Returns `(text_autoria, sigla_combinada)`. Unknown authors get sigla `"INDEF"`. |
+| `construir_nome_arquivo` | `(num_oficio_str, sigla_servidor, tipo_mocao, num_mocao, envio, nome_dest, sigla_autores, ano) -> str` | Builds `.docx` filename. Strips Windows-illegal chars (`\/*?:"<>\|`). Appends `-{year_2digit}` to moção number. |
+| `formatar_autores` | `(lista_autores: list[str]) -> tuple[str, str]` | Returns `(text_autoria, sigla_combinada)`. Siglas are **lowercase**. Unknown authors get sigla `"indef"`. |
+| `sigla_autor` | `(nome: str) -> str` | Returns the individual lowercase sigla for a single author name, or `"indef"` if not in `MAPA_AUTORES`. Used to format the Vereador column in the spreadsheet. |
 | `processar_destinatario` | `(dest: dict) -> dict` | Applies business rules for address/envio/tratamento. Mayor override is hardcoded via `config.json`. |
 
 **`__main__` block:**
@@ -210,7 +211,7 @@ Editable without recompiling. Loaded by `auto_oficios.py` at import.
 ```
 
 **When the mayor changes:** edit `nome` and `endereco` in this file.  
-**When a new councillor joins:** add an entry to `autores` (lowercase sigla — the code calls `.upper()` when formatting).  
+**When a new councillor joins:** add an entry to `autores` using a **lowercase sigla** (e.g. `"mjm"`) — the code keeps them lowercase throughout.  
 **For the distributed exe:** `config.json` must be placed alongside `AutoOficios.exe`, and `templates/modelo_oficio.docx` inside a `templates/` subfolder.
 
 ---
@@ -271,6 +272,8 @@ Columns: `Of. n.º | Data | Destinatário | Assunto | Vereador | Envio | Autor`
 File: `planilha_gerada/CONTROLE_OFICIOS.xlsx` — **overwritten on every run** (intentional).  
 Sheet name: `Controle {year}` (dynamic).
 
+The **Vereador** column contains each author name followed by their sigla in parentheses: `"Nome Autor (sigla)"`. Multiple authors are comma-separated, e.g. `"Alex Dantas (ad), Arnaldo Alves (aa)"`.
+
 ---
 
 ## 8. Testing
@@ -281,7 +284,7 @@ Sheet name: `Controle {year}` (dynamic).
 & ".venv\Scripts\python.exe" -m pytest
 ```
 
-**Stats:** 112 tests, all passing. No external network calls — all AI interactions are mocked.
+**Stats:** 123 tests, all passing. No external network calls — all AI interactions are mocked.
 
 **Test file:** `tests/test_auto_oficios.py` (769 lines)
 
@@ -343,7 +346,7 @@ The app creates `proposituras/`, `oficios_gerados/`, `planilha_gerada/`, `logs/`
 
 | # | Issue | Priority | Status |
 | --- | --- | --- | --- |
-| 1 | `año` suffix in filename hardcoded: `-26` | High | **Pending** — must use `year % 100` from selected date |
+| 1 | `año` suffix in filename hardcoded: `-26` | High | **Fixed** — `construir_nome_arquivo` now receives `ano` parameter and computes `year % 100` |
 | 2 | `.doc` reading: `word.Quit()` in `finally` crashes if `Dispatch()` threw | Medium | **Pending** |
 | 3 | Author not in `MAPA_AUTORES` → silent `"INDEF"` with no user warning | Medium | **Pending** |
 | 4 | Cancel button during processing | Medium | **Pending** (threading.Event scaffolding exists in plan) |
