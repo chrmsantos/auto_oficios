@@ -476,7 +476,7 @@ def formatar_autores(lista_autores: list[str]) -> tuple[str, str]:
         # Busca a sigla no mapa ignorando maiúsculas/minúsculas
         autor_lower = autor.lower()
         sigla = next((s for nome_l, s in _MAPA_AUTORES_ITENS if nome_l in autor_lower), "indef")
-        siglas.append(sigla.upper())
+        siglas.append(sigla.lower())
         nomes_limpos.append(autor)
         femininos.append(any(nome_f in autor_lower for nome_f in _VEREADORES_FEMININO_LOWER))
 
@@ -496,6 +496,13 @@ def formatar_autores(lista_autores: list[str]) -> tuple[str, str]:
             texto_autoria = f"dos vereadores {nomes_str}"
 
     return texto_autoria, sigla_final
+
+
+def sigla_autor(nome: str) -> str:
+    """Retorna a sigla individual de um autor (minúscula), ou 'indef' se desconhecido."""
+    nome_lower = nome.lower()
+    return next((s for nome_l, s in _MAPA_AUTORES_ITENS if nome_l in nome_lower), "indef").lower()
+
 
 def processar_destinatario(dest: dict[str, Any]) -> dict[str, str]:
     """Aplica as regras de negócio para endereço, envio e tratamento."""

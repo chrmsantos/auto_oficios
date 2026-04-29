@@ -1688,7 +1688,7 @@ class AutoOficiosApp(ctk.CTk):
                         inputs["data_iso"],
                         f"{info['tratamento_rodape']} {info['destinatario_nome']}".strip(),
                         f"Encaminha Moção de {dados['tipo_mocao']} nº {dados['numero_mocao']}/{year}",
-                        ", ".join(dados["autores"]),
+                        ", ".join(f"{a} ({_ao.sigla_autor(a)})" for a in dados["autores"]),
                         info["envio"],
                         inputs["sigla"],
                     ])

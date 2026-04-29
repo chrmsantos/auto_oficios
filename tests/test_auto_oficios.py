@@ -220,7 +220,7 @@ class TestConstruirNomeArquivo:
         assert "redator" in self._nome(sigla_servidor="redator")
 
     def test_sigla_autores_refletida(self):
-        assert "AD-AA" in self._nome(sigla_autores="AD-AA")
+        assert "ad-aa" in self._nome(sigla_autores="ad-aa")
 
     def test_remove_caracteres_invalidos_windows(self):
         nome = construir_nome_arquivo(
@@ -245,11 +245,11 @@ class TestFormatarAutores:
 
     def test_autor_unico_sigla_conhecida(self):
         _, sigla = formatar_autores(["Alex Dantas"])
-        assert sigla == "AD"
+        assert sigla == "ad"
 
     def test_autor_desconhecido_sigla_indef(self):
         _, sigla = formatar_autores(["Vereador Fantasma"])
-        assert sigla == "INDEF"
+        assert sigla == "indef"
 
     def test_dois_autores_texto_plural(self):
         texto, _ = formatar_autores(["Alex Dantas", "Arnaldo Alves"])
@@ -257,11 +257,11 @@ class TestFormatarAutores:
 
     def test_dois_autores_sigla(self):
         _, sigla = formatar_autores(["Alex Dantas", "Arnaldo Alves"])
-        assert sigla == "AD-AA"
+        assert sigla == "ad-aa"
 
     def test_tres_autores_sigla(self):
         _, sigla = formatar_autores(["Alex Dantas", "Arnaldo Alves", "Cabo Dorigon"])
-        assert sigla == "AD-AA-CD"
+        assert sigla == "ad-aa-cd"
 
     def test_tres_autores_usa_e_no_final(self):
         texto, _ = formatar_autores(["Alex Dantas", "Arnaldo Alves", "Cabo Dorigon"])
@@ -269,15 +269,15 @@ class TestFormatarAutores:
 
     def test_busca_sigla_case_insensitive(self):
         _, sigla = formatar_autores(["alex dantas"])
-        assert sigla == "AD"
+        assert sigla == "ad"
 
     def test_autor_com_acento_no_mapa(self):
         _, sigla = formatar_autores(["Celso Ávila"])
-        assert sigla == "CLAB"
+        assert sigla == "clab"
 
     def test_mistura_conhecido_desconhecido(self):
         _, sigla = formatar_autores(["Alex Dantas", "Vereador X"])
-        assert sigla == "AD-INDEF"
+        assert sigla == "ad-indef"
 
     def test_vereadora_unica_texto(self):
         texto, _ = formatar_autores(["Esther Moraes"])
@@ -285,7 +285,7 @@ class TestFormatarAutores:
 
     def test_vereadora_unica_sigla(self):
         _, sigla = formatar_autores(["Esther Moraes"])
-        assert sigla == "EGSBM"
+        assert sigla == "egsbm"
 
     def test_todas_vereadoras_plural(self):
         # hypothetical: two female councillors
