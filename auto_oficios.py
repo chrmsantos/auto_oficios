@@ -525,7 +525,18 @@ def processar_destinatario(dest: dict[str, Any]) -> dict[str, str]:
         tratamento_rodape = "Ao Ilustríssimo Senhor"
 
     # Endereço
-    endereco_final = dest.get("cargo_ou_tratamento", "")
+    # Para pessoas físicas (não-instituição), descarta cargo_ou_tratamento que
+    # seja apenas um honorífico genérico (ex: "Sr.", "Senhor") pois o
+    # tratamento_rodape já cobre isso e o valor ficaria isolado no rodapé.
+    _HONORIFICOS = frozenset({
+        "sr", "sr.", "sra", "sra.", "senhor", "senhora",
+        "ilustríssimo senhor", "ilustríssima senhora",
+        "ilustríssimo sr.", "ilustríssima sra.",
+    })
+    cargo = dest.get("cargo_ou_tratamento", "")
+    if not is_inst and cargo.strip().lower() in _HONORIFICOS:
+        cargo = ""
+    endereco_final = cargo
     if dest.get("endereco"):
         endereco_final += f"\n{dest['endereco']}"
     if dest.get("email"):
