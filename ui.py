@@ -718,6 +718,10 @@ class AutoOficiosApp(ctk.CTk):
             for p in pastas if p.exists()
         )
 
+        # Nothing to clear — proceed immediately without prompting.
+        if total == 0:
+            return True
+
         confirmado: list[bool] = [False]
 
         dlg = ctk.CTkToplevel(self)
@@ -744,8 +748,6 @@ class AutoOficiosApp(ctk.CTk):
         _desc = (
             f"Os {total} arquivo(s) nas pastas abaixo serão enviados para a Lixeira "
             f"antes da geração:\n\n" + "\n".join(_nomes)
-        ) if total > 0 else (
-            "As pastas de saída estão vazias. Deseja prosseguir com a geração?"
         )
         ctk.CTkLabel(
             dlg, text=_desc,
@@ -1367,6 +1369,7 @@ class AutoOficiosApp(ctk.CTk):
                 _ao._MAPA_AUTORES_ITENS = tuple(
                     (n.lower(), s) for n, s in reloaded["autores"].items()
                 )
+                _ao._MAPA_AUTORES_CASING = {n.lower(): n for n in reloaded["autores"]}
                 _ao._VEREADORES_FEMININO_LOWER = frozenset(
                     n.lower() for n in reloaded.get("vereadores_feminino", [])
                 )

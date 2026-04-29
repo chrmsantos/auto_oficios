@@ -18,7 +18,7 @@ from typing import Any, cast
 # =============================================================================
 # Identificação do produto
 APP_NAME    = "Z7 OfficeLetters"
-APP_VERSION = "2.0.0-beta7"
+APP_VERSION = "2.0.0-beta8"
 APP_AUTHOR  = "Christian Martin dos Santos"
 
 # Configurações de Negócio
@@ -57,7 +57,8 @@ _PROMPT_TEMPLATE_PADRAO: str = (
     "      - 'endereco': endereço completo do destinatário,\n" \
     "      - 'email': email do destinatário,\n" \
     "      - 'is_prefeito': true se o destinatário for o prefeito, caso contrário false,\n" \
-    "      - 'is_instituicao': true se o destinatário for uma instituição, caso contrário false\n" \
+    "      - 'is_instituicao': true se o destinatário for uma instituição, caso contrário false,\n" \
+    "      - 'genero': \"M\" para masculino ou \"F\" para feminino — infira pelo nome, cargo ou tratamento do destinatário; use \"M\" quando indeterminado\n" \
     "    \n"
     "    Formato JSON esperado:\n"
     "    {\n"
@@ -71,7 +72,8 @@ _PROMPT_TEMPLATE_PADRAO: str = (
     '                "endereco": "Endereço completo se houver no texto, senão vazio",\n'
     '                "email": "Email se houver, senão vazio",\n'
     '                "is_prefeito": true ou false,\n'
-    '                "is_instituicao": true ou false\n'
+    '                "is_instituicao": true ou false,\n'
+    '                "genero": "M" ou "F"\n'
     "            }\n"
     "        ]\n"
     "    }\n"
@@ -126,6 +128,9 @@ _PREFEITO: dict[str, str] = _CONFIG["prefeito"]
 _MAPA_AUTORES_ITENS: tuple[tuple[str, str], ...] = tuple(
     (nome.lower(), sigla) for nome, sigla in MAPA_AUTORES.items()
 )
+
+# Maps lowercase author name → canonical casing from config (e.g. "cabo dorigon" → "Cabo Dorigon").
+_MAPA_AUTORES_CASING: dict[str, str] = {nome.lower(): nome for nome in MAPA_AUTORES}
 
 # Lower-cased set of female councillor names for gender-correct attribution.
 _VEREADORES_FEMININO_LOWER: frozenset[str] = frozenset(
@@ -477,10 +482,16 @@ def formatar_autores(lista_autores: list[str]) -> tuple[str, str]:
         autor_lower = autor.lower()
         sigla = next((s for nome_l, s in _MAPA_AUTORES_ITENS if nome_l in autor_lower), "indef")
         siglas.append(sigla.lower())
-        nomes_limpos.append(autor)
+        # Usa o nome canônico do config; se não encontrado, converte para title case
+        nome_canonico = next(
+            (casing for nome_l, casing in _MAPA_AUTORES_CASING.items() if nome_l in autor_lower),
+            autor.title(),
+        )
+        nomes_limpos.append(nome_canonico)
         femininos.append(any(nome_f in autor_lower for nome_f in _VEREADORES_FEMININO_LOWER))
 
-    sigla_final = f"{siglas[0]} e outros" if len(siglas) > 1 else siglas[0]
+    sigla_principal = next((s for s in siglas if s != "indef"), "indef")
+    sigla_final = f"{sigla_principal} e outros" if len(siglas) > 1 else sigla_principal
     todas_femininas = all(femininos)
 
     if len(nomes_limpos) == 1:
@@ -519,10 +530,14 @@ def processar_destinatario(dest: dict[str, Any]) -> dict[str, str]:
     
     # Tratamento Rodapé
     is_inst = dest.get("is_instituicao", False)
+    genero   = dest.get("genero", "M")  # "M" ou "F"; padrão masculino
     if is_inst:
         tratamento_rodape = "Ao" if not dest["nome"].lower().startswith("a") else "À"
     else:
-        tratamento_rodape = "Ao Ilustríssimo Senhor"
+        if genero == "F":
+            tratamento_rodape = "À Ilustríssima Senhora"
+        else:
+            tratamento_rodape = "Ao Ilustríssimo Senhor"
 
     # Endereço
     # Para pessoas físicas (não-instituição), descarta cargo_ou_tratamento que
@@ -534,8 +549,16 @@ def processar_destinatario(dest: dict[str, Any]) -> dict[str, str]:
         "ilustríssimo sr.", "ilustríssima sra.",
     })
     cargo = dest.get("cargo_ou_tratamento", "")
-    if not is_inst and cargo.strip().lower() in _HONORIFICOS:
-        cargo = ""
+    if not is_inst:
+        # Remove honorífico genérico que precede um cargo real separado por "/"
+        # Ex: "Sr. / Ex-servidor"  →  "Ex-servidor"
+        if "/" in cargo:
+            partes = [p.strip() for p in cargo.split("/", 1)]
+            if partes[0].lower() in _HONORIFICOS:
+                cargo = partes[1]
+        # Descarta o campo inteiro quando é apenas um honorífico genérico
+        if cargo.strip().lower() in _HONORIFICOS:
+            cargo = ""
     endereco_final = cargo
     if dest.get("endereco"):
         endereco_final += f"\n{dest['endereco']}"
@@ -550,12 +573,22 @@ def processar_destinatario(dest: dict[str, Any]) -> dict[str, str]:
     else:
         envio = "Em Mãos"
 
+    if is_inst:
+        vocativo     = "Ilustríssimas Senhoras" if genero == "F" else "Ilustríssimos Senhores"
+        pronome_corp = "Vossas Senhorias"
+    else:
+        if genero == "F":
+            vocativo = "Ilustríssima Senhora"
+        else:
+            vocativo = "Ilustríssimo Senhor"
+        pronome_corp = "Vossa Senhoria"
+
     return {
         "tratamento_rodape": tratamento_rodape,
         "destinatario_nome": dest["nome"].upper(),
         "destinatario_endereco": endereco_final.strip(),
-        "vocativo": "Ilustríssimo(a) Senhor(a)",
-        "pronome_corpo": "Vossa Senhoria",
+        "vocativo": vocativo,
+        "pronome_corpo": pronome_corp,
         "envio": envio
     }
 

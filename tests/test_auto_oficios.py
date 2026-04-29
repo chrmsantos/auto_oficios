@@ -55,6 +55,7 @@ def _dest_simples(**overrides):
         "cargo_ou_tratamento": "",
         "endereco": "",
         "email": "",
+        "genero": "M",
     }
     base.update(overrides)
     return base
@@ -279,6 +280,15 @@ class TestFormatarAutores:
         _, sigla = formatar_autores(["Alex Dantas", "Vereador X"])
         assert sigla == "ad e outros"
 
+    def test_desconhecido_primeiro_usa_sigla_do_segundo(self):
+        # Quando o 1º autor não está no mapa, a sigla do 1º conhecido deve ser usada
+        _, sigla = formatar_autores(["Vereador X", "Alex Dantas"])
+        assert sigla == "ad e outros"
+
+    def test_todos_desconhecidos_sigla_indef(self):
+        _, sigla = formatar_autores(["Vereador X", "Vereador Y"])
+        assert sigla == "indef e outros"
+
     def test_vereadora_unica_texto(self):
         texto, _ = formatar_autores(["Esther Moraes"])
         assert texto == "da vereadora Esther Moraes"
@@ -298,7 +308,7 @@ class TestFormatarAutores:
 
     def test_vereadora_case_insensitive(self):
         texto, _ = formatar_autores(["esther moraes"])
-        assert texto == "da vereadora esther moraes"
+        assert texto == "da vereadora Esther Moraes"
 
 
 # =============================================================================
@@ -341,9 +351,13 @@ class TestProcessarDestinatario:
         r = processar_destinatario(_dest_simples(nome="João Silva"))
         assert r["destinatario_nome"] == "JOÃO SILVA"
 
-    def test_pessoa_fisica_tratamento(self):
-        r = processar_destinatario(_dest_simples())
+    def test_pessoa_fisica_masculino_tratamento(self):
+        r = processar_destinatario(_dest_simples(genero="M"))
         assert r["tratamento_rodape"] == "Ao Ilustríssimo Senhor"
+
+    def test_pessoa_fisica_feminino_tratamento(self):
+        r = processar_destinatario(_dest_simples(genero="F"))
+        assert r["tratamento_rodape"] == "À Ilustríssima Senhora"
 
     def test_pronome_pessoa_fisica(self):
         r = processar_destinatario(_dest_simples())
@@ -357,6 +371,26 @@ class TestProcessarDestinatario:
         r = processar_destinatario(_dest_simples(nome="ABCD Fundação", is_instituicao=True))
         assert r["tratamento_rodape"] == "À"
 
+    def test_instituicao_pronome_plural(self):
+        r = processar_destinatario(_dest_simples(nome="Câmara Municipal", is_instituicao=True))
+        assert r["pronome_corpo"] == "Vossas Senhorias"
+
+    def test_instituicao_masculina_vocativo(self):
+        r = processar_destinatario(_dest_simples(nome="Câmara Municipal", is_instituicao=True, genero="M"))
+        assert r["vocativo"] == "Ilustríssimos Senhores"
+
+    def test_instituicao_feminina_vocativo(self):
+        r = processar_destinatario(_dest_simples(nome="Associação das Mães", is_instituicao=True, genero="F"))
+        assert r["vocativo"] == "Ilustríssimas Senhoras"
+
+    def test_pessoa_fisica_masculino_vocativo(self):
+        r = processar_destinatario(_dest_simples(genero="M"))
+        assert r["vocativo"] == "Ilustríssimo Senhor"
+
+    def test_pessoa_fisica_feminino_vocativo(self):
+        r = processar_destinatario(_dest_simples(nome="Maria Silva", genero="F"))
+        assert r["vocativo"] == "Ilustríssima Senhora"
+
     def test_endereco_concatena_cargo_e_logradouro(self):
         r = processar_destinatario(_dest_simples(
             cargo_ou_tratamento="Secretário de Saúde",
@@ -368,6 +402,15 @@ class TestProcessarDestinatario:
     def test_endereco_inclui_email(self):
         r = processar_destinatario(_dest_simples(cargo_ou_tratamento="Diretor", email="d@e.com"))
         assert "d@e.com" in r["destinatario_endereco"]
+
+    def test_honorífico_barra_cargo_remove_honorifico(self):
+        # "Sr. / Ex-servidor" → apenas "Ex-servidor" no endereço
+        r = processar_destinatario(_dest_simples(cargo_ou_tratamento="Sr. / Ex-servidor"))
+        assert r["destinatario_endereco"] == "Ex-servidor"
+
+    def test_honorifico_barra_cargo_variante_sem_ponto(self):
+        r = processar_destinatario(_dest_simples(cargo_ou_tratamento="Sr / Diretor Geral"))
+        assert r["destinatario_endereco"] == "Diretor Geral"
 
 
 # =============================================================================
