@@ -16,8 +16,8 @@ ctk_dir   = str(Path(customtkinter.__file__).parent)
 babel_dir = str(Path(babel.__file__).parent)
 
 a = Analysis(
-    ["ui.py"],
-    pathex=["."],
+    ["src/z7_officeletters/__main__.py"],
+    pathex=["src", "."],
     binaries=[],
     datas=[
         # customtkinter: temas, fontes e imagens internas
@@ -66,7 +66,27 @@ a = Analysis(
         "send2trash",
         "send2trash.plat_win",
         # Core app
-        "auto_oficios",
+        "z7_officeletters",
+        "z7_officeletters.core",
+        "z7_officeletters.core.ai",
+        "z7_officeletters.core.api_key",
+        "z7_officeletters.core.authors",
+        "z7_officeletters.core.config",
+        "z7_officeletters.core.documents",
+        "z7_officeletters.core.files",
+        "z7_officeletters.core.logging_setup",
+        "z7_officeletters.core.recipients",
+        "z7_officeletters.gui",
+        "z7_officeletters.gui.app",
+        "z7_officeletters.gui.constants",
+        "z7_officeletters.gui.dialogs",
+        "z7_officeletters.gui.dialogs.api_key",
+        "z7_officeletters.gui.dialogs.config_editor",
+        "z7_officeletters.gui.dialogs.confirmation",
+        "z7_officeletters.gui.dialogs.date_picker",
+        "z7_officeletters.gui.dialogs.prompt_editor",
+        "z7_officeletters.gui.workers",
+        "z7_officeletters.gui.workers.processor",
         # Misc
         "PIL",
         "PIL._tkinter_finder",

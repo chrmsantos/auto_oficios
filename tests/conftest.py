@@ -1,0 +1,62 @@
+"""Shared test fixtures and helpers for the z7_officeletters test suite."""
+
+from __future__ import annotations
+
+from typing import Any
+from unittest.mock import MagicMock
+
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# Shared data-builder helpers (available as plain functions for test modules)
+# ---------------------------------------------------------------------------
+
+def make_dados_mocao_validos(**overrides: Any) -> dict[str, Any]:
+    """Return a minimal valid motion-data dict."""
+    base: dict[str, Any] = {
+        "tipo_mocao": "Aplauso",
+        "numero_mocao": "123",
+        "autores": ["Alex Dantas"],
+        "destinatarios": [{"nome": "Fulano de Tal"}],
+    }
+    base.update(overrides)
+    return base
+
+
+def make_dest_simples(**overrides: Any) -> dict[str, Any]:
+    """Return a minimal valid recipient dict."""
+    base: dict[str, Any] = {
+        "nome": "João Silva",
+        "is_prefeito": False,
+        "is_instituicao": False,
+        "cargo_ou_tratamento": "",
+        "endereco": "",
+        "email": "",
+        "genero": "M",
+    }
+    base.update(overrides)
+    return base
+
+
+def make_ai_response(payload: dict[str, Any]) -> MagicMock:
+    """Return a fake Gemini response whose ``.text`` is compact JSON."""
+    import json
+
+    mock = MagicMock()
+    mock.text = json.dumps(payload)
+    return mock
+
+
+# ---------------------------------------------------------------------------
+# Pytest fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def dados_mocao_validos() -> dict[str, Any]:
+    return make_dados_mocao_validos()
+
+
+@pytest.fixture()
+def dest_simples() -> dict[str, Any]:
+    return make_dest_simples()

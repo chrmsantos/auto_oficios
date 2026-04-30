@@ -289,6 +289,15 @@ class TestFormatarAutores:
         _, sigla = formatar_autores(["Vereador X", "Vereador Y"])
         assert sigla == "indef e outros"
 
+    def test_nome_sem_acento_resolve_sigla(self):
+        # IA pode retornar "Jose Luis Fornasari" sem acento; deve resolver para jlf
+        _, sigla = formatar_autores(["Jose Luis Fornasari"])
+        assert sigla == "jlf"
+
+    def test_nome_sem_acento_resolve_casing_canonico(self):
+        texto, _ = formatar_autores(["Jose Luis Fornasari"])
+        assert "José Luis Fornasari" in texto
+
     def test_vereadora_unica_texto(self):
         texto, _ = formatar_autores(["Esther Moraes"])
         assert texto == "da vereadora Esther Moraes"

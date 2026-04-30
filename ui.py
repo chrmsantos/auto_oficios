@@ -1370,6 +1370,10 @@ class AutoOficiosApp(ctk.CTk):
                     (n.lower(), s) for n, s in reloaded["autores"].items()
                 )
                 _ao._MAPA_AUTORES_CASING = {n.lower(): n for n in reloaded["autores"]}
+                _ao._MAPA_AUTORES_ITENS_NORM = tuple(
+                    (_ao._norm(n), s) for n, s in reloaded["autores"].items()
+                )
+                _ao._MAPA_AUTORES_CASING_NORM = {_ao._norm(n): n for n in reloaded["autores"]}
                 _ao._VEREADORES_FEMININO_LOWER = frozenset(
                     n.lower() for n in reloaded.get("vereadores_feminino", [])
                 )

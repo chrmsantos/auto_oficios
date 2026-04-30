@@ -4,6 +4,7 @@ import json
 import sys
 import time
 import types
+import unicodedata
 import uuid
 import logging
 from datetime import datetime
@@ -18,7 +19,7 @@ from typing import Any, cast
 # =============================================================================
 # Identificação do produto
 APP_NAME    = "Z7 OfficeLetters"
-APP_VERSION = "2.0.0-beta8"
+APP_VERSION = "2.1.6-beta1"
 APP_AUTHOR  = "Christian Martin dos Santos"
 
 # Configurações de Negócio
@@ -131,6 +132,18 @@ _MAPA_AUTORES_ITENS: tuple[tuple[str, str], ...] = tuple(
 
 # Maps lowercase author name → canonical casing from config (e.g. "cabo dorigon" → "Cabo Dorigon").
 _MAPA_AUTORES_CASING: dict[str, str] = {nome.lower(): nome for nome in MAPA_AUTORES}
+
+
+def _norm(s: str) -> str:
+    """Lowercase + remove diacritics for fuzzy name matching."""
+    return unicodedata.normalize("NFD", s.lower()).encode("ascii", "ignore").decode()
+
+
+# Same lookup tables with diacritics stripped — used for fallback matching.
+_MAPA_AUTORES_ITENS_NORM: tuple[tuple[str, str], ...] = tuple(
+    (_norm(nome), sigla) for nome, sigla in MAPA_AUTORES.items()
+)
+_MAPA_AUTORES_CASING_NORM: dict[str, str] = {_norm(nome): nome for nome in MAPA_AUTORES}
 
 # Lower-cased set of female councillor names for gender-correct attribution.
 _VEREADORES_FEMININO_LOWER: frozenset[str] = frozenset(
@@ -478,14 +491,20 @@ def formatar_autores(lista_autores: list[str]) -> tuple[str, str]:
     femininos: list[bool] = []
 
     for autor in lista_autores:
-        # Busca a sigla no mapa ignorando maiúsculas/minúsculas
+        # Busca a sigla no mapa ignorando maiúsculas/minúsculas;
+        # faz segundo passe sem acentos para cobrir variações da IA.
         autor_lower = autor.lower()
-        sigla = next((s for nome_l, s in _MAPA_AUTORES_ITENS if nome_l in autor_lower), "indef")
+        autor_norm  = _norm(autor)
+        sigla = (
+            next((s for nome_l, s in _MAPA_AUTORES_ITENS      if nome_l in autor_lower), None)
+            or next((s for nome_l, s in _MAPA_AUTORES_ITENS_NORM if nome_l in autor_norm),  "indef")
+        )
         siglas.append(sigla.lower())
         # Usa o nome canônico do config; se não encontrado, converte para title case
-        nome_canonico = next(
-            (casing for nome_l, casing in _MAPA_AUTORES_CASING.items() if nome_l in autor_lower),
-            autor.title(),
+        nome_canonico = (
+            next((casing for nome_l, casing in _MAPA_AUTORES_CASING.items()      if nome_l in autor_lower), None)
+            or next((casing for nome_l, casing in _MAPA_AUTORES_CASING_NORM.items() if nome_l in autor_norm),  None)
+            or autor.title()
         )
         nomes_limpos.append(nome_canonico)
         femininos.append(any(nome_f in autor_lower for nome_f in _VEREADORES_FEMININO_LOWER))
