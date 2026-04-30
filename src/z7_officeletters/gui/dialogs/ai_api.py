@@ -1,0 +1,254 @@
+"""AI API settings dialog.
+
+Shows fields for the Gemini API key and AI model name. A single "Salvar"
+button persists both values and immediately performs a live connection test,
+displaying the result in an output area within the dialog.
+
+Public exports:
+    show_ai_api_dialog: Open the AI API settings dialog.
+"""
+
+from __future__ import annotations
+
+import re
+import threading
+import webbrowser
+from typing import Callable
+
+import customtkinter as ctk
+
+from z7_officeletters.core.api_key import DEFAULT_MODELO_IA
+from z7_officeletters.gui.constants import _C
+
+__all__ = ["show_ai_api_dialog"]
+
+_RE_API_KEY: re.Pattern[str] = re.compile(r"^AIza[0-9A-Za-z\-_]{35}$")
+
+
+def show_ai_api_dialog(
+    parent: ctk.CTk,
+    apikey_var: ctk.StringVar,
+    modelo_ia_var: ctk.StringVar,
+    get_stored_key: Callable[[], str],
+    on_saved: Callable[[str, str], None],
+) -> None:
+    """Open the AI API settings dialog.
+
+    Args:
+        parent: The root window (used to centre the dialog).
+        apikey_var: StringVar bound to the API key entry.
+        modelo_ia_var: StringVar bound to the model name entry.
+        get_stored_key: Callable returning the currently persisted key (empty if none).
+        on_saved: Callback invoked with ``(api_key, modelo)`` after a successful save.
+    """
+    from z7_officeletters.core.api_key import salvar_api_key, salvar_modelo_ia  # noqa: PLC0415
+    import z7_officeletters.core.ai as _ai  # noqa: PLC0415
+
+    apikey_visible: list[bool] = [False]
+
+    dlg = ctk.CTkToplevel(parent)
+    dlg.title("API de IA")
+    dlg.geometry("480x550")
+    dlg.resizable(False, False)
+    dlg.grab_set()
+    dlg.configure(fg_color=_C["bg"])
+
+    dlg.update_idletasks()
+    px, py = parent.winfo_x(), parent.winfo_y()
+    pw, ph = parent.winfo_width(), parent.winfo_height()
+    dlg.geometry(f"480x550+{px + (pw - 480) // 2}+{py + (ph - 550) // 2}")
+
+    # ── Section: API Key ───────────────────────────────────────────────────────
+    ctk.CTkLabel(
+        dlg, text="CHAVE GEMINI API",
+        font=ctk.CTkFont(size=11, weight="bold"),
+        text_color=_C["accent"], anchor="w",
+    ).pack(fill="x", padx=20, pady=(18, 2))
+    ctk.CTkFrame(dlg, height=1, fg_color=_C["border"]).pack(fill="x", padx=20, pady=(0, 8))
+
+    _current_key = get_stored_key() or apikey_var.get().strip()
+    _status_lbl = ctk.CTkLabel(
+        dlg,
+        text="✔  Chave configurada" if _current_key else "⚠  Chave não configurada",
+        font=ctk.CTkFont(size=12),
+        text_color=_C["success"] if _current_key else _C["warn"],
+        anchor="w",
+    )
+    _status_lbl.pack(fill="x", padx=22, pady=(0, 6))
+
+    api_frame = ctk.CTkFrame(dlg, fg_color="transparent")
+    api_frame.pack(fill="x", padx=20)
+    api_frame.grid_columnconfigure(0, weight=1)
+
+    api_entry = ctk.CTkEntry(
+        api_frame, textvariable=apikey_var,
+        placeholder_text="Cole sua chave aqui…",
+        font=ctk.CTkFont(size=13), height=36,
+        show="•",
+    )
+    api_entry.grid(row=0, column=0, sticky="ew")
+    api_entry.focus_set()
+
+    def _toggle_api_visibility() -> None:
+        apikey_visible[0] = not apikey_visible[0]
+        api_entry.configure(show="" if apikey_visible[0] else "•")
+
+    ctk.CTkButton(
+        api_frame, text="👁", width=36, height=36,
+        font=ctk.CTkFont(size=16),
+        fg_color=_C["panel"], hover_color=_C["border"],
+        text_color=_C["text"],
+        command=_toggle_api_visibility,
+    ).grid(row=0, column=1, padx=(6, 0))
+
+    # ── Section: AI Model ──────────────────────────────────────────────────────
+    ctk.CTkLabel(
+        dlg, text="MODELO IA",
+        font=ctk.CTkFont(size=11, weight="bold"),
+        text_color=_C["accent"], anchor="w",
+    ).pack(fill="x", padx=20, pady=(14, 2))
+    ctk.CTkFrame(dlg, height=1, fg_color=_C["border"]).pack(fill="x", padx=20, pady=(0, 8))
+
+    model_frame = ctk.CTkFrame(dlg, fg_color="transparent")
+    model_frame.pack(fill="x", padx=20)
+    model_frame.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkEntry(
+        model_frame, textvariable=modelo_ia_var,
+        placeholder_text=f"Ex: {DEFAULT_MODELO_IA}",
+        font=ctk.CTkFont(size=13), height=36,
+    ).grid(row=0, column=0, sticky="ew")
+
+    # ── Output area ────────────────────────────────────────────────────────────
+    ctk.CTkLabel(
+        dlg, text="SAÍDA",
+        font=ctk.CTkFont(size=10, weight="bold"),
+        text_color=_C["dim"], anchor="w",
+    ).pack(fill="x", padx=22, pady=(14, 2))
+
+    output_box = ctk.CTkTextbox(
+        dlg,
+        font=ctk.CTkFont(family="Consolas", size=11),
+        fg_color=_C["panel"], text_color=_C["text"],
+        corner_radius=8, height=130,
+        state="disabled",
+    )
+    output_box.pack(fill="x", padx=20)
+
+    tb = output_box._textbox  # type: ignore[attr-defined]
+    tb.tag_config("success", foreground=_C["success"])
+    tb.tag_config("error",   foreground=_C["error"])
+    tb.tag_config("warn",    foreground=_C["warn"])
+    tb.tag_config("dim",     foreground=_C["dim"])
+
+    def _append(text: str, tag: str = "") -> None:
+        tb.configure(state="normal")
+        if tag:
+            tb.insert("end", text + "\n", tag)
+        else:
+            tb.insert("end", text + "\n")
+        tb.see("end")
+        tb.configure(state="disabled")
+
+    def _clear_output() -> None:
+        tb.configure(state="normal")
+        tb.delete("1.0", "end")
+        tb.configure(state="disabled")
+
+    # ── Save button ────────────────────────────────────────────────────────────
+    save_btn = ctk.CTkButton(
+        dlg,
+        text="💾  Salvar",
+        font=ctk.CTkFont(size=13, weight="bold"),
+        height=44, corner_radius=10,
+        fg_color=_C["accent"], hover_color=_C["accent2"],
+        text_color="#ffffff",
+    )
+    save_btn.pack(fill="x", padx=20, pady=(14, 6))
+
+    ctk.CTkButton(
+        dlg,
+        text="🌐  Google AI Studio",
+        font=ctk.CTkFont(size=12),
+        height=32, corner_radius=8,
+        fg_color="transparent", hover_color=_C["border"],
+        text_color=_C["dim"], border_width=1, border_color=_C["border"],
+        command=lambda: webbrowser.open("https://aistudio.google.com/welcome"),
+    ).pack(fill="x", padx=20, pady=(0, 20))
+
+    def _on_save() -> None:
+        _clear_output()
+        api_key = apikey_var.get().strip()
+        modelo = modelo_ia_var.get().strip()
+        effective_key = api_key or get_stored_key()
+
+        if not effective_key:
+            _append("⚠  Informe uma chave de API.", "warn")
+            return
+        if not modelo:
+            _append("⚠  Informe um nome de modelo.", "warn")
+            return
+        if api_key and not _RE_API_KEY.match(api_key):
+            _append(
+                "✘  Formato de chave inválido.\n"
+                '   Chaves Gemini começam com "AIza" + 35 caracteres.',
+                "error",
+            )
+            return
+
+        save_btn.configure(state="disabled")
+        _append("Salvando chave e modelo…", "dim")
+
+        def _do_save_and_test() -> None:
+            try:
+                if api_key:
+                    salvar_api_key(api_key)
+                    dlg.after(0, lambda: _append("✔  Chave salva.", "success"))
+                else:
+                    dlg.after(0, lambda: _append("ℹ  Usando chave já armazenada.", "dim"))
+                salvar_modelo_ia(modelo)
+                _ai.MODELO_IA = modelo
+                dlg.after(0, lambda: _append("✔  Modelo salvo.", "success"))
+                dlg.after(0, lambda: _append("Testando conexão com a API…", "dim"))
+
+                from google import genai  # noqa: PLC0415
+
+                cliente = genai.Client(api_key=effective_key)
+                response = cliente.models.generate_content(
+                    model=modelo,
+                    contents="Responda apenas com a palavra: OK",
+                )
+                resp_text: str = (response.text or "").strip()
+
+                if not resp_text:
+                    raise ValueError("A IA não retornou conteúdo na resposta.")
+
+                dlg.after(0, lambda: _append("✔  IA respondeu — configuração válida.", "success"))
+                dlg.after(0, lambda: _append(f"   Resposta: {resp_text}"))
+
+                try:
+                    dlg.after(
+                        0,
+                        lambda: _status_lbl.configure(
+                            text="✔  Chave configurada",
+                            text_color=_C["success"],
+                        ),
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+
+                on_saved(effective_key, modelo)
+
+            except Exception as exc:  # noqa: BLE001
+                err_msg = str(exc)
+                dlg.after(0, lambda: _append(f"✘  Falha na validação: {err_msg}", "error"))
+            finally:
+                try:
+                    dlg.after(0, lambda: save_btn.configure(state="normal"))
+                except Exception:  # noqa: BLE001
+                    pass
+
+        threading.Thread(target=_do_save_and_test, daemon=True).start()
+
+    save_btn.configure(command=_on_save)
+    dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
