@@ -103,6 +103,7 @@ def _carregar_prompt_template() -> str:
 
 
 PROMPT_TEMPLATE: str = _carregar_prompt_template()
+MODELO_IA: str = "gemini-2.0-flash"  # mutável em runtime via diálogo Avançado
 
 # =============================================================================
 # CONFIGURAÇÃO EXTERNA (config.json)
@@ -218,6 +219,8 @@ def configurar_logging(verbose: bool = False) -> str:
 # =============================================================================
 _KEYRING_SERVICE = "auto_oficios"
 _KEYRING_USERNAME = "gemini_api_key"
+_KEYRING_MODEL_USERNAME = "gemini_model"
+DEFAULT_MODELO_IA = "gemini-2.0-flash"
 
 
 def _salvar_api_key_no_ambiente(chave: str) -> None:
@@ -233,6 +236,19 @@ def carregar_api_key() -> str:
     """Recupera a chave de API do Windows Credential Manager."""
     import keyring  # noqa: PLC0415
     return keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME) or ""
+
+
+def salvar_modelo_ia(modelo: str) -> None:
+    """Persiste o nome do modelo de IA no Windows Credential Manager."""
+    import keyring  # noqa: PLC0415
+    keyring.set_password(_KEYRING_SERVICE, _KEYRING_MODEL_USERNAME, modelo)
+    logger.info("Modelo IA '%s' persistido no Credential Manager.", modelo)
+
+
+def carregar_modelo_ia() -> str:
+    """Recupera o nome do modelo de IA do Windows Credential Manager."""
+    import keyring  # noqa: PLC0415
+    return keyring.get_password(_KEYRING_SERVICE, _KEYRING_MODEL_USERNAME) or DEFAULT_MODELO_IA
 
 
 def migrar_chave_do_registro() -> None:
@@ -440,7 +456,7 @@ def extrair_dados_com_ia(texto_mocao: str, cliente_genai: Any) -> dict[str, Any]
     for tentativa in range(MAX_TENTATIVAS):
         try:
             response = cliente_genai.models.generate_content(
-                model="gemini-3.1-pro-preview",
+                model=MODELO_IA,
                 contents=prompt,
             )
             logger.debug(f"Resposta recebida (tentativa {tentativa + 1}).")

@@ -45,6 +45,9 @@ def make_ai_response(payload: dict[str, Any]) -> MagicMock:
 
     mock = MagicMock()
     mock.text = json.dumps(payload)
+    mock.usage_metadata.prompt_token_count = 10
+    mock.usage_metadata.candidates_token_count = 5
+    mock.usage_metadata.total_token_count = 15
     return mock
 
 

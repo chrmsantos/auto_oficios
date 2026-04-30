@@ -678,13 +678,13 @@ class AutoOficiosApp(ctk.CTk):
         show_date_picker(self, self._data_var)
 
     def _open_avancado(self) -> None:
-        from z7_officeletters.gui.dialogs.api_key import show_api_key_dialog  # noqa: PLC0415
+        from z7_officeletters.core.api_key import salvar_api_key  # noqa: PLC0415
         from z7_officeletters.gui.dialogs.config_editor import show_config_editor  # noqa: PLC0415
         from z7_officeletters.gui.dialogs.prompt_editor import show_prompt_editor  # noqa: PLC0415
 
         dlg = ctk.CTkToplevel(self)
         dlg.title("Avançado")
-        dlg.geometry("460x390")
+        dlg.geometry("460x410")
         dlg.resizable(False, False)
         dlg.grab_set()
         dlg.configure(fg_color=_C["bg"])
@@ -692,14 +692,15 @@ class AutoOficiosApp(ctk.CTk):
         dlg.update_idletasks()
         px, py = self.winfo_x(), self.winfo_y()
         pw, ph = self.winfo_width(), self.winfo_height()
-        dlg.geometry(f"460x390+{px + (pw - 460) // 2}+{py + (ph - 390) // 2}")
+        dlg.geometry(f"460x410+{px + (pw - 460) // 2}+{py + (ph - 410) // 2}")
 
+        # ── CHAVE GEMINI API ──────────────────────────────────────────────────
         ctk.CTkLabel(
             dlg, text="CHAVE GEMINI API",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=_C["accent"], anchor="w",
         ).pack(fill="x", padx=20, pady=(18, 2))
-        ctk.CTkFrame(dlg, height=1, fg_color=_C["border"]).pack(fill="x", padx=20, pady=(0, 10))
+        ctk.CTkFrame(dlg, height=1, fg_color=_C["border"]).pack(fill="x", padx=20, pady=(0, 6))
 
         _dlg_status = ctk.CTkLabel(
             dlg,
@@ -708,10 +709,10 @@ class AutoOficiosApp(ctk.CTk):
             text_color=_C["success"] if self._has_api_key() else _C["warn"],
             anchor="w",
         )
-        _dlg_status.pack(fill="x", padx=22, pady=(4, 0))
+        _dlg_status.pack(fill="x", padx=22, pady=(0, 6))
 
         def _update_dlg_status(*_: object) -> None:
-            hk = self._has_api_key()
+            hk = self._has_api_key() or bool(self._apikey_var.get().strip())
             try:
                 _dlg_status.configure(
                     text="✔  Chave configurada" if hk else "⚠  Chave não configurada",
@@ -722,16 +723,69 @@ class AutoOficiosApp(ctk.CTk):
 
         trace_id = self._apikey_var.trace_add("write", _update_dlg_status)
 
+        apikey_visible: list[bool] = [False]
+
+        api_frame = ctk.CTkFrame(dlg, fg_color="transparent")
+        api_frame.pack(fill="x", padx=20, pady=(0, 0))
+        api_frame.grid_columnconfigure(0, weight=1)
+
+        api_entry = ctk.CTkEntry(
+            api_frame, textvariable=self._apikey_var,
+            placeholder_text="Cole sua chave aqui…",
+            font=ctk.CTkFont(size=13), height=36,
+            show="•",
+        )
+        api_entry.grid(row=0, column=0, sticky="ew")
+
+        def _toggle_api_visibility() -> None:
+            apikey_visible[0] = not apikey_visible[0]
+            api_entry.configure(show="" if apikey_visible[0] else "•")
+
         ctk.CTkButton(
-            dlg, text="🔑  Chave de API",
-            font=ctk.CTkFont(size=12), height=36, corner_radius=10,
+            api_frame, text="👁", width=36, height=36,
+            font=ctk.CTkFont(size=16),
             fg_color=_C["panel"], hover_color=_C["border"],
-            text_color=_C["text"], border_width=1, border_color=_C["border"],
-            command=lambda: show_api_key_dialog(
-                self, self._apikey_var, self._has_api_key,
-                lambda k: setattr(self, "_stored_key", k),
-            ),
-        ).pack(fill="x", padx=20, pady=(10, 0))
+            text_color=_C["text"],
+            command=_toggle_api_visibility,
+        ).grid(row=0, column=1, padx=(6, 0))
+
+        _RE_API_KEY = re.compile(r"^AIza[0-9A-Za-z\-_]{35}$")
+
+        def _save_key() -> None:
+            api_key = self._apikey_var.get().strip()
+            if not api_key:
+                messagebox.showwarning("Chave de API", "Informe uma chave para salvar.", parent=dlg)
+                return
+            if not _RE_API_KEY.match(api_key):
+                messagebox.showerror(
+                    "Chave de API inválida",
+                    "O formato da chave não é reconhecido.\n\n"
+                    "Chaves Gemini começam com \"AIza\" seguido de 35 caracteres "
+                    "(letras, dígitos, hifens ou underscores).\n\n"
+                    "Verifique se copiou a chave corretamente.",
+                    parent=dlg,
+                )
+                return
+            try:
+                salvar_api_key(api_key)
+            except Exception as exc:  # noqa: BLE001
+                messagebox.showerror(
+                    "Chave de API",
+                    f"Não foi possível salvar a chave.\n\n{exc}",
+                    parent=dlg,
+                )
+                return
+            self._stored_key = api_key
+            self._apikey_var.set("")
+            messagebox.showinfo("Chave de API", "Chave salva com sucesso.", parent=dlg)
+
+        ctk.CTkButton(
+            api_frame, text="💾", width=36, height=36,
+            font=ctk.CTkFont(size=15),
+            fg_color=_C["accent"], hover_color=_C["accent2"],
+            text_color="#ffffff",
+            command=_save_key,
+        ).grid(row=0, column=2, padx=(6, 0))
 
         ctk.CTkLabel(
             dlg, text="MODELO IA",
@@ -751,19 +805,29 @@ class AutoOficiosApp(ctk.CTk):
         )
         model_entry.grid(row=0, column=0, sticky="ew")
 
+        _RE_MODELO = re.compile(r"^gemini(-[a-zA-Z0-9]+)+$")
+
         def _save_model() -> None:
             import z7_officeletters.core.ai as _ai  # noqa: PLC0415
             modelo = self._modelo_ia_var.get().strip()
             if not modelo:
-                from tkinter import messagebox as _mb  # noqa: PLC0415
-                _mb.showwarning("Modelo IA", "Informe um nome de modelo.", parent=dlg)
+                messagebox.showwarning("Modelo IA", "Informe um nome de modelo.", parent=dlg)
+                return
+            if not _RE_MODELO.match(modelo):
+                messagebox.showerror(
+                    "Modelo IA inválido",
+                    "O nome do modelo não é reconhecido.\n\n"
+                    "Modelos Gemini seguem o padrão \"gemini-<versão>-<variante>\"\n"
+                    "Ex: gemini-2.0-flash, gemini-1.5-pro\n\n"
+                    "Verifique o nome do modelo na documentação do Google AI.",
+                    parent=dlg,
+                )
                 return
             try:
                 salvar_modelo_ia(modelo)
                 _ai.MODELO_IA = modelo
             except Exception as exc:  # noqa: BLE001
-                from tkinter import messagebox as _mb  # noqa: PLC0415
-                _mb.showerror("Modelo IA", f"Não foi possível salvar.\n\n{exc}", parent=dlg)
+                messagebox.showerror("Modelo IA", f"Não foi possível salvar.\n\n{exc}", parent=dlg)
 
         ctk.CTkButton(
             model_frame, text="💾", width=36, height=36,
@@ -805,6 +869,12 @@ class AutoOficiosApp(ctk.CTk):
             btn_frame, text="📈  Template de Planilha",
             command=self._open_modelo_planilha, **_btn_kw,
         ).grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=(4, 0))
+
+        ctk.CTkButton(
+            btn_frame, text="🌐  Google AI Studio",
+            command=lambda: __import__("webbrowser").open("https://aistudio.google.com"),
+            **_btn_kw,
+        ).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
         def _on_close() -> None:
             self._apikey_var.trace_remove("write", trace_id)

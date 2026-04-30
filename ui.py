@@ -303,6 +303,7 @@ class AutoOficiosApp(ctk.CTk):
         self._apikey_visible = False
         self._apikey_entry = None  # criado dentro do diálogo de chave
         self._apikey_var.trace_add("write", self._on_apikey_changed)
+        self._modelo_ia_var = ctk.StringVar(value="")
 
         # ── Spacer + Botões ────────────────────────────────────────────────────
         self._action_frame = ctk.CTkFrame(self._left, fg_color="transparent")
@@ -618,11 +619,13 @@ class AutoOficiosApp(ctk.CTk):
         except Exception:
             pass
 
-        # Step 1 — API key
+        # Step 1 — API key + model
         loaded_key = ""
+        loaded_model = ""
         try:
             _ao.migrar_chave_do_registro()
             loaded_key = _ao.carregar_api_key()
+            loaded_model = _ao.carregar_modelo_ia()
         except Exception:
             pass
 
@@ -642,11 +645,14 @@ class AutoOficiosApp(ctk.CTk):
         except Exception:
             pass
 
-        self._on_splash_ready(loaded_key, prop_files_list, session_state)
+        self._on_splash_ready(loaded_key, loaded_model, prop_files_list, session_state)
 
-    def _on_splash_ready(self, loaded_key: str, prop_files_list: list, session_state: dict) -> None:
+    def _on_splash_ready(self, loaded_key: str, loaded_model: str, prop_files_list: list, session_state: dict) -> None:
         """Populates UI after init steps complete."""
         self._apply_stored_key(loaded_key)
+        if loaded_model:
+            self._modelo_ia_var.set(loaded_model)
+            _ao.MODELO_IA = loaded_model
 
         if "numero_oficio" in session_state:
             self._num_var.set(session_state["numero_oficio"])
@@ -853,7 +859,7 @@ class AutoOficiosApp(ctk.CTk):
         """Opens the Advanced dialog: API key access, Configurações and Prompt IA."""
         dlg = ctk.CTkToplevel(self)
         dlg.title("Avançado")
-        dlg.geometry("460x310")
+        dlg.geometry("460x390")
         dlg.resizable(False, False)
         dlg.grab_set()
         dlg.configure(fg_color=_C["bg"])
@@ -861,7 +867,7 @@ class AutoOficiosApp(ctk.CTk):
         dlg.update_idletasks()
         px, py = self.winfo_x(), self.winfo_y()
         pw, ph = self.winfo_width(), self.winfo_height()
-        dlg.geometry(f"460x310+{px + (pw - 460) // 2}+{py + (ph - 310) // 2}")
+        dlg.geometry(f"460x390+{px + (pw - 460) // 2}+{py + (ph - 390) // 2}")
 
         # ── Chave Gemini API ──────────────────────────────────────────────────
         ctk.CTkLabel(
@@ -905,6 +911,43 @@ class AutoOficiosApp(ctk.CTk):
                 pass
 
         _trace_id = self._apikey_var.trace_add("write", _update_dlg_status)
+
+        # ── Modelo IA ─────────────────────────────────────────────────────────
+        ctk.CTkLabel(
+            dlg, text="MODELO IA",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=_C["accent"], anchor="w",
+        ).pack(fill="x", padx=20, pady=(14, 2))
+        ctk.CTkFrame(dlg, height=1, fg_color=_C["border"]).pack(fill="x", padx=20, pady=(0, 6))
+
+        model_frame = ctk.CTkFrame(dlg, fg_color="transparent")
+        model_frame.pack(fill="x", padx=20)
+        model_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkEntry(
+            model_frame, textvariable=self._modelo_ia_var,
+            placeholder_text="Ex: gemini-2.0-flash",
+            font=ctk.CTkFont(size=13), height=36,
+        ).grid(row=0, column=0, sticky="ew")
+
+        def _save_model() -> None:
+            modelo = self._modelo_ia_var.get().strip()
+            if not modelo:
+                messagebox.showwarning("Modelo IA", "Informe um nome de modelo.", parent=dlg)
+                return
+            try:
+                _ao.salvar_modelo_ia(modelo)
+                _ao.MODELO_IA = modelo
+            except Exception as exc:
+                messagebox.showerror("Modelo IA", f"Não foi possível salvar.\n\n{exc}", parent=dlg)
+
+        ctk.CTkButton(
+            model_frame, text="💾", width=36, height=36,
+            font=ctk.CTkFont(size=15),
+            fg_color=_C["panel"], hover_color=_C["border"],
+            text_color=_C["text"],
+            command=_save_model,
+        ).grid(row=0, column=1, padx=(6, 0))
 
         # ── Botões ────────────────────────────────────────────────────────────
         ctk.CTkFrame(dlg, height=1, fg_color=_C["border"]).pack(

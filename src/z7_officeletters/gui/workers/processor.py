@@ -105,6 +105,9 @@ def _worker_main(
         year: int = int(inputs["data_iso"][:4])
         erros = 0
         inicio = time.time()
+        total_prompt_tokens = 0
+        total_candidates_tokens = 0
+        total_tokens = 0
 
         for i, texto in enumerate(textos, 1):
             if cancel_event.is_set():
@@ -120,6 +123,16 @@ def _worker_main(
                 q.put(("log", f"  ✖  Erro: {exc}", "error"))
                 erros += 1
                 continue
+
+            usage = dados.pop("_usage", {"prompt_tokens": 0, "candidates_tokens": 0, "total_tokens": 0})
+            total_prompt_tokens += usage["prompt_tokens"]
+            total_candidates_tokens += usage["candidates_tokens"]
+            total_tokens += usage["total_tokens"]
+            if usage["total_tokens"]:
+                q.put(("log",
+                    f"  🔢  Tokens: {usage['total_tokens']:,} "
+                    f"(entrada: {usage['prompt_tokens']:,} | saída: {usage['candidates_tokens']:,})",
+                    "dim"))
 
             dados["numero_mocao"] = _docs.normalizar_numero_mocao(dados["numero_mocao"])
             texto_autoria, sigla_autores = _authors.formatar_autores(dados["autores"])
@@ -206,6 +219,11 @@ def _worker_main(
         wb.save(os.path.join(PASTA_PLANILHA, "CONTROLE_OFICIOS.xlsx"))
 
         elapsed = time.time() - inicio
+        if total_tokens:
+            q.put(("log",
+                f"\n🔢  Tokens consumidos: {total_tokens:,} total "
+                f"(entrada: {total_prompt_tokens:,} | saída: {total_candidates_tokens:,})",
+                "accent"))
         q.put(("done", len(dados_planilha), erros, elapsed))
 
     except Exception as exc:  # noqa: BLE001

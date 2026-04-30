@@ -243,6 +243,19 @@ def extrair_dados_com_ia(texto_mocao: str, cliente_genai: Any) -> dict[str, Any]
             resultado.get("numero_mocao"),
             resultado.get("tipo_mocao"),
         )
+
+        try:
+            um = response.usage_metadata
+            resultado["_usage"] = {
+                "prompt_tokens":     int(um.prompt_token_count),
+                "candidates_tokens": int(um.candidates_token_count),
+                "total_tokens":      int(um.total_token_count),
+            }
+        except Exception:  # noqa: BLE001
+            resultado["_usage"] = {
+                "prompt_tokens": 0, "candidates_tokens": 0, "total_tokens": 0
+            }
+
         return resultado
 
     raise RuntimeError("Número máximo de tentativas excedido.")
