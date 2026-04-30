@@ -19,6 +19,10 @@ proposituras/
 oficios_gerados/
 logs/
 
+# PyInstaller build artifacts
+build/
+dist/
+
 # Excel / Word generated files (keep only the model)
 CONTROLE_OFICIOS_FINAL.xlsx
 
