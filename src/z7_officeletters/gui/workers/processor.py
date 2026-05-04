@@ -112,7 +112,7 @@ def _worker_main(
         modelo_requerimento_pesar = _resolve_template(MODELO_REQUERIMENTO_PESAR)
 
         if not modelo_oficio.exists():
-            q.put(("error", f"Arquivo 'modelo_oficio.docx' não encontrado.\n{modelo_oficio}"))
+            q.put(("error", f"Arquivo 'modelo_mocao.docx' não encontrado.\n{modelo_oficio}"))
             return
 
         dados_planilha: list[list[str]] = []
@@ -196,8 +196,8 @@ def _worker_main(
                     _tmpl = modelo_requerimento_pesar
                     if not _tmpl.exists():
                         q.put(("log",
-                            f"  ⚠  Template 'modelo_requerimento_pesar.docx' não encontrado — "
-                            f"usando modelo_oficio.docx como fallback.",
+                            f"  ⚠  Template 'modelo_requer_pesar.docx' não encontrado — "
+                            f"usando modelo_mocao.docx como fallback.",
                             "warn"))
                         _tmpl = modelo_oficio
                 else:

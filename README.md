@@ -43,7 +43,7 @@ pip install google-genai docxtpl openpyxl pytest
 | Arquivo | Descrição |
 | --- | --- |
 | `mocoes.txt` | Texto completo das moções, uma após a outra |
-| `modelo_oficio.docx` | Template Word com as variáveis de contexto |
+| `modelo_mocao.docx` | Template Word com as variáveis de contexto |
 
 ### Executar
 

@@ -12,7 +12,7 @@ Your primary source of truth is `ai_context.md`. Read it at the start of any non
 - **GUI**: `ui.py` — customtkinter dark-mode interface; sole user entry point. Do not add business logic here.
 - **Config**: `config.json` — editable without recompiling; holds `autores` (author initials map) and `prefeito` info.
 - **AI extraction**: Google Gemini API (`google-genai`). Prompts must produce structured data (type, number, authors, recipients) from moção text.
-- **Output**: one `.docx` letter per recipient via `docxtpl` + `modelo_oficio.docx` template; one `CONTROLE_OFICIOS.xlsx` via `openpyxl`.
+- **Output**: one `.docx` letter per recipient via `docxtpl` + `modelo_mocao.docx` template; one `CONTROLE_OFICIOS.xlsx` via `openpyxl`.
 - **Portuguese language**: all user-facing strings, log messages, variable names, and comments must be in Brazilian Portuguese.
 - **Windows-only**: uses `winreg`, `win32com`, `os.startfile` — do not introduce cross-platform abstractions.
 

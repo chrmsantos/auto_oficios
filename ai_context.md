@@ -14,7 +14,7 @@ Workflow:
 1. User places a `.txt`/`.docx`/`.pdf`/`.odt` file containing one or more *moções* (legislative motions) in `proposituras/`.
 2. User fills in the GUI: ofício start number, author initials, date, propositura file, Gemini API key.
 3. App calls **Google Gemini AI** to extract structured data from each moção text (type, number, authors, recipients).
-4. App generates one `.docx` letter per recipient using a **Word template** (`modelo_oficio.docx`).
+4. App generates one `.docx` letter per recipient using a **Word template** (`modelo_mocao.docx`).
 5. App generates/overwrites a single **Excel spreadsheet** (`planilha_gerada/CONTROLE_OFICIOS.xlsx`) accumulating all runs.
 6. All output and logs are written relative to the **current working directory** at runtime.
 
@@ -73,7 +73,7 @@ officelatters/
 ├── ai_context.md            # ← this file
 │
 ├── templates/
-│   ├── modelo_oficio.docx   # Word template (NOT versioned)
+│   ├── modelo_mocao.docx   # Word template (NOT versioned)
 │   └── modelo_planilha.xlsx # Excel template (auto-generated if missing)
 │
 ├── proposituras/            # Input folder — user places moção files here
@@ -212,7 +212,7 @@ Editable without recompiling. Loaded by `auto_oficios.py` at import.
 
 **When the mayor changes:** edit `nome` and `endereco` in this file.  
 **When a new councillor joins:** add an entry to `autores` using a **lowercase sigla** (e.g. `"mjm"`) — the code keeps them lowercase throughout.  
-**For the distributed exe:** `config.json` must be placed alongside `AutoOficios.exe`, and `templates/modelo_oficio.docx` inside a `templates/` subfolder.
+**For the distributed exe:** `config.json` must be placed alongside `AutoOficios.exe`, and `templates/modelo_mocao.docx` inside a `templates/` subfolder.
 
 ---
 
@@ -328,7 +328,7 @@ Output: `dist\Z7_OfficeLetters.exe` (~50 MB, single file, no console window).
 Z7_OfficeLetters.exe
 config.json
 templates/
-    modelo_oficio.docx
+    modelo_mocao.docx
 ```
 
 The app creates `proposituras/`, `oficios_gerados/`, `planilha_gerada/`, `logs/` automatically on first run in the same directory.

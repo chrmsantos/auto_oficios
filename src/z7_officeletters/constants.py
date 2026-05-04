@@ -61,8 +61,8 @@ ORDEM_PREFERENCIA: tuple[str, ...] = (".txt", ".docx", ".doc", ".odt", ".pdf")
 FORMATOS_SUPORTADOS: frozenset[str] = frozenset(ORDEM_PREFERENCIA)
 
 # ── Template paths (relative to the application root) ────────────────────────
-MODELO_OFICIO: str = "templates/modelo_oficio.docx"
-MODELO_REQUERIMENTO_PESAR: str = "templates/modelo_requerimento_pesar.docx"
+MODELO_OFICIO: str = "templates/modelo_mocao.docx"
+MODELO_REQUERIMENTO_PESAR: str = "templates/modelo_requer_pesar.docx"
 MODELO_PLANILHA: str = "templates/modelo_planilha.xlsx"
 
 # ── User-data directories ─────────────────────────────────────────────────────
