@@ -644,34 +644,13 @@ class AutoOficiosApp(ctk.CTk):
         folder.mkdir(exist_ok=True)
         os.startfile(str(folder))
 
-    def _open_modelo_oficio(self) -> None:
+    def _open_pasta_templates(self) -> None:
         if getattr(sys, "frozen", False):
-            modelo = Path(sys.executable).parent / MODELO_OFICIO
-            if not modelo.exists():
-                modelo = Path(getattr(sys, "_MEIPASS", "")) / MODELO_OFICIO
+            pasta = Path(sys.executable).parent / "templates"
         else:
-            modelo = Path(__file__).parent.parent.parent.parent / MODELO_OFICIO
-        if not modelo.exists():
-            messagebox.showwarning(
-                "Modelo não encontrado",
-                f"O arquivo não foi encontrado:\n{modelo}\n\n"
-                "Crie o arquivo modelo_oficio.docx na pasta templates do aplicativo e tente novamente.",
-            )
-            return
-        os.startfile(str(modelo))
-
-    def _open_modelo_planilha(self) -> None:
-        if getattr(sys, "frozen", False):
-            modelo = Path(sys.executable).parent / MODELO_PLANILHA
-        else:
-            modelo = Path(__file__).parent.parent.parent.parent / MODELO_PLANILHA
-        if not modelo.exists():
-            try:
-                criar_modelo_planilha(modelo)
-            except Exception as exc:  # noqa: BLE001
-                messagebox.showerror("Erro", f"Não foi possível criar o modelo:\n{exc}")
-                return
-        os.startfile(str(modelo))
+            pasta = Path(__file__).parent.parent.parent.parent / "templates"
+        pasta.mkdir(parents=True, exist_ok=True)
+        os.startfile(str(pasta))
 
     def _open_date_picker(self) -> None:
         from z7_officeletters.gui.dialogs.date_picker import show_date_picker  # noqa: PLC0415
@@ -742,14 +721,9 @@ class AutoOficiosApp(ctk.CTk):
         ).grid(row=1, column=1, sticky="ew", padx=(3, 0))
 
         ctk.CTkButton(
-            btn_frame, text="📝  Template de Ofício",
-            command=self._open_modelo_oficio, **_btn_kw,
-        ).grid(row=2, column=0, sticky="ew", padx=(0, 3), pady=(4, 0))
-
-        ctk.CTkButton(
-            btn_frame, text="📈  Template de Planilha",
-            command=self._open_modelo_planilha, **_btn_kw,
-        ).grid(row=2, column=1, sticky="ew", padx=(3, 0), pady=(4, 0))
+            btn_frame, text="�  Modelos",
+            command=self._open_pasta_templates, **_btn_kw,
+        ).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
 

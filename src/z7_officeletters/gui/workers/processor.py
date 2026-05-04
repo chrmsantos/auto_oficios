@@ -39,7 +39,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from z7_officeletters.constants import MODELO_OFICIO, MODELO_PLANILHA, PASTA_SAIDA, PASTA_PLANILHA
+from z7_officeletters.constants import MODELO_OFICIO, MODELO_REQUERIMENTO_PESAR, MODELO_PLANILHA, PASTA_SAIDA, PASTA_PLANILHA
 from z7_officeletters.core import ai as _ai
 from z7_officeletters.core import authors as _authors
 from z7_officeletters.core import documents as _docs
@@ -47,7 +47,7 @@ from z7_officeletters.core import files as _files
 from z7_officeletters.core import recipients as _recipients
 from z7_officeletters.core.api_key import salvar_api_key
 from z7_officeletters.core.logging_setup import configurar_logging
-from z7_officeletters.gui.constants import _RE_MOCAO_SPLIT
+from z7_officeletters.gui.constants import _RE_PROPOSITURA_SPLIT, detectar_tipo_propositura
 
 __all__ = ["run_processing_worker"]
 
@@ -70,31 +70,46 @@ def _worker_main(
         cliente = genai.Client(api_key=inputs["api_key"])
 
         arquivos_proc: list[str] = inputs["arquivos"]
-        todos_textos: list[str] = []
+        todos_textos: list[tuple[str, str]] = []
         for arq in arquivos_proc:
             q.put(("log", f"📂  Lendo: {Path(arq).name}", "accent"))
             conteudo = _files.ler_arquivo_mocoes(arq)
-            textos_arq = _RE_MOCAO_SPLIT.split(conteudo)
-            todos_textos.extend(
-                t.strip()
-                for t in textos_arq
-                if t.strip() and _RE_MOCAO_SPLIT.match(t.strip())
-            )
+            textos_arq = _RE_PROPOSITURA_SPLIT.split(conteudo)
+            for t in textos_arq:
+                t = t.strip()
+                if t and _RE_PROPOSITURA_SPLIT.match(t):
+                    todos_textos.append((t, detectar_tipo_propositura(t)))
 
-        textos = todos_textos
-        total = len(textos)
-
-        q.put(("log", f"\n✦  {total} moção(ões) encontrada(s). Iniciando IA…\n", "bold"))
+        proposituras = todos_textos
+        total = len(proposituras)
+        n_mocoes = sum(1 for _, tp in proposituras if tp == "mocao")
+        n_pesar = sum(1 for _, tp in proposituras if tp == "requerimento_pesar")
+        partes = []
+        if n_mocoes:
+            partes.append(f"{n_mocoes} moção(oes)")
+        if n_pesar:
+            partes.append(f"{n_pesar} requerimento(s) de pesar")
+        resumo = " e ".join(partes) if partes else f"{total} propositura(s)"
+        q.put(("log", f"\n❆  {resumo} encontrada(s). Iniciando IA…\n", "bold"))
         q.put(("progress", 0, total))
 
         Path(PASTA_SAIDA).mkdir(parents=True, exist_ok=True)
 
-        if getattr(sys, "frozen", False):
-            modelo_oficio = Path(sys.executable).parent / MODELO_OFICIO
-            if not modelo_oficio.exists():
-                modelo_oficio = Path(getattr(sys, "_MEIPASS", "")) / MODELO_OFICIO
-        else:
-            modelo_oficio = Path(__file__).parent.parent.parent.parent.parent / MODELO_OFICIO
+        _app_root = (
+            Path(sys.executable).parent
+            if getattr(sys, "frozen", False)
+            else Path(__file__).parent.parent.parent.parent.parent
+        )
+        _meipass = Path(getattr(sys, "_MEIPASS", ""))
+
+        def _resolve_template(rel: str) -> Path:
+            p = _app_root / rel
+            if not p.exists() and getattr(sys, "frozen", False):
+                p = _meipass / rel
+            return p
+
+        modelo_oficio = _resolve_template(MODELO_OFICIO)
+        modelo_requerimento_pesar = _resolve_template(MODELO_REQUERIMENTO_PESAR)
 
         if not modelo_oficio.exists():
             q.put(("error", f"Arquivo 'modelo_oficio.docx' não encontrado.\n{modelo_oficio}"))
@@ -109,16 +124,16 @@ def _worker_main(
         total_candidates_tokens = 0
         total_tokens = 0
 
-        for i, texto in enumerate(textos, 1):
+        for i, (texto, tipo_propositura) in enumerate(proposituras, 1):
             if cancel_event.is_set():
                 q.put(("cancelled", i - 1, total))
                 return
 
-            q.put(("log", f"─── Moção {i}/{total} ─────────────────────────", "dim"))
+            q.put(("log", f"─── Propositura {i}/{total} ─────────────────────────────", "dim"))
             q.put(("progress", i - 1, total))
 
             try:
-                dados = _ai.extrair_dados_com_ia(texto, cliente)
+                dados = _ai.extrair_dados_com_ia(texto, cliente, tipo_propositura=tipo_propositura)
             except Exception as exc:  # noqa: BLE001
                 q.put(("log", f"  ✖  Erro: {exc}", "error"))
                 erros += 1
@@ -134,18 +149,27 @@ def _worker_main(
                     f"(entrada: {usage['prompt_tokens']:,} | saída: {usage['candidates_tokens']:,})",
                     "dim"))
 
-            dados["numero_mocao"] = _docs.normalizar_numero_mocao(dados["numero_mocao"])
+            # Normalise motion/requerimento number to just the numeric part.
+            num_raw = dados.get("numero_requerimento") or dados.get("numero_mocao", "")
+            dados["numero_mocao"] = _docs.normalizar_numero_mocao(str(num_raw))
+            tipo_mocao_str = str(dados.get("tipo_mocao", ""))
+            falecido_str = str(dados.get("falecido", ""))
             texto_autoria, sigla_autores = _authors.formatar_autores(dados["autores"])
 
             for dest in dados["destinatarios"]:
                 info = _recipients.processar_destinatario(dest)
                 num_str = f"{numero_atual:03d}"
 
+                sigla_redator = inputs["sigla"]
+
                 ctx: dict[str, str] = {
                     "num_oficio":            num_str,
                     "data_extenso":          inputs["data_extenso"],
-                    "tipo_mocao":            str(dados["tipo_mocao"]),
+                    "tipo_mocao":            tipo_mocao_str,
                     "num_mocao":             str(dados["numero_mocao"]),
+                    "falecido":              falecido_str,
+                    "tipo_propositura":      tipo_propositura,
+                    "sigla_redator":         sigla_redator,
                     "vocativo":              info["vocativo"],
                     "pronome_corpo":         info["pronome_corpo"],
                     "texto_autoria":         texto_autoria,
@@ -155,8 +179,11 @@ def _worker_main(
                     # Uppercase aliases for Word template placeholders
                     "NUM_OFICIO":            num_str,
                     "DATA_EXTENSO":          inputs["data_extenso"],
-                    "TIPO_MOCAO":            str(dados["tipo_mocao"]),
+                    "TIPO_MOCAO":            tipo_mocao_str,
                     "NUM_MOCAO":             str(dados["numero_mocao"]),
+                    "FALECIDO":              falecido_str,
+                    "TIPO_PROPOSITURA":      tipo_propositura,
+                    "SIGLA_REDATOR":         sigla_redator,
                     "VOCATIVO":              info["vocativo"],
                     "PRONOME_CORPO":         info["pronome_corpo"],
                     "TEXTO_AUTORIA":         texto_autoria,
@@ -165,27 +192,43 @@ def _worker_main(
                     "DESTINATARIO_ENDERECO": info["destinatario_endereco"],
                 }
 
-                doc = DocxTemplate(str(modelo_oficio))
+                if tipo_propositura == "requerimento_pesar":
+                    _tmpl = modelo_requerimento_pesar
+                    if not _tmpl.exists():
+                        q.put(("log",
+                            f"  ⚠  Template 'modelo_requerimento_pesar.docx' não encontrado — "
+                            f"usando modelo_oficio.docx como fallback.",
+                            "warn"))
+                        _tmpl = modelo_oficio
+                else:
+                    _tmpl = modelo_oficio
+
+                doc = DocxTemplate(str(_tmpl))
                 doc.render(ctx)
 
                 nome = _docs.construir_nome_arquivo(
                     num_str,
                     inputs["sigla"],
-                    dados["tipo_mocao"],
+                    tipo_mocao_str,
                     dados["numero_mocao"],
                     info["envio"],
                     dest["nome"],
                     sigla_autores,
                     ano=year,
+                    tipo_propositura=tipo_propositura,
                 )
                 doc.save(os.path.join(PASTA_SAIDA, nome))
                 q.put(("log", f"  ✔  {nome}", "success"))
 
+                if tipo_propositura == "requerimento_pesar":
+                    assunto = f"Encaminha Requerimento de Pesar nº {dados['numero_mocao']}/{year}"
+                else:
+                    assunto = f"Encaminha Moção de {tipo_mocao_str} nº {dados['numero_mocao']}/{year}"
                 dados_planilha.append([
                     num_str,
                     inputs["data_iso"],
                     f"{info['tratamento_rodape']} {info['destinatario_nome']}".strip(),
-                    f"Encaminha Moção de {dados['tipo_mocao']} nº {dados['numero_mocao']}/{year}",
+                    assunto,
                     ", ".join(
                         f"{a} ({_authors.sigla_autor(a)})" for a in dados["autores"]
                     ),

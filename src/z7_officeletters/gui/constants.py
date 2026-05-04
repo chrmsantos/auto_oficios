@@ -8,14 +8,16 @@ Public exports:
     _DARK: Dark-theme colour map.
     _LIGHT: Light-theme colour map.
     _C: Mutable active palette (initialised to ``_DARK``).
-    _RE_MOCAO_SPLIT: Pre-compiled regex that splits multi-motion text files.
+    _RE_PROPOSITURA_SPLIT: Pre-compiled regex that splits multi-propositura text files.
+    _RE_TIPO_PROPOSITURA: Pre-compiled regex that identifies the type of each block.
+    detectar_tipo_propositura: Return the detected type of a propositura text block.
 """
 
 from __future__ import annotations
 
 import re
 
-__all__ = ["_DARK", "_LIGHT", "_C", "_RE_MOCAO_SPLIT"]
+__all__ = ["_DARK", "_LIGHT", "_C", "_RE_PROPOSITURA_SPLIT", "_RE_TIPO_PROPOSITURA", "detectar_tipo_propositura"]
 
 _DARK: dict[str, str] = {
     "bg":      "#0f111a",
@@ -48,7 +50,28 @@ _LIGHT: dict[str, str] = {
 # Mutable active palette — updated in-place by _toggle_theme.
 _C: dict[str, str] = dict(_DARK)
 
-# Splits a multi-motion text file at each "MOÇÃO Nº" header.
-_RE_MOCAO_SPLIT: re.Pattern[str] = re.compile(
-    r'(?=MOÇÃO\s+N[º°])', re.IGNORECASE
+# Splits a multi-propositura text file at each "MOÇÃO Nº" or "REQUERIMENTO Nº" header.
+_RE_PROPOSITURA_SPLIT: re.Pattern[str] = re.compile(
+    r'(?=(?:MOÇÃO|REQUERIMENTO)\s+N[º°])', re.IGNORECASE
 )
+
+# Identifies the type of a propositura block from its opening header.
+_RE_TIPO_PROPOSITURA: re.Pattern[str] = re.compile(
+    r'^(?P<tipo>MOÇÃO|REQUERIMENTO(?:\s+DE\s+PESAR)?)\s+N[º°]', re.IGNORECASE
+)
+
+
+def detectar_tipo_propositura(texto: str) -> str:
+    """Return the propositura type detected from the block's opening header.
+
+    Args:
+        texto: Raw text of a single propositura block.
+
+    Returns:
+        ``"requerimento_pesar"`` if the block starts with a *requerimento*
+        header; ``"mocao"`` otherwise (including when no header is matched).
+    """
+    m = _RE_TIPO_PROPOSITURA.match(texto.lstrip())
+    if m and m.group("tipo").upper().startswith("REQUERIMENTO"):
+        return "requerimento_pesar"
+    return "mocao"

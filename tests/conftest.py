@@ -12,6 +12,18 @@ import pytest
 # Shared data-builder helpers (available as plain functions for test modules)
 # ---------------------------------------------------------------------------
 
+def make_dados_requerimento_validos(**overrides: Any) -> dict[str, Any]:
+    """Return a minimal valid requerimento de pesar data dict."""
+    base: dict[str, Any] = {
+        "numero_requerimento": "45",
+        "falecido": "João da Silva",
+        "autores": ["Alex Dantas"],
+        "destinatarios": [{"nome": "Fulano de Tal"}],
+    }
+    base.update(overrides)
+    return base
+
+
 def make_dados_mocao_validos(**overrides: Any) -> dict[str, Any]:
     """Return a minimal valid motion-data dict."""
     base: dict[str, Any] = {
@@ -58,6 +70,11 @@ def make_ai_response(payload: dict[str, Any]) -> MagicMock:
 @pytest.fixture()
 def dados_mocao_validos() -> dict[str, Any]:
     return make_dados_mocao_validos()
+
+
+@pytest.fixture()
+def dados_requerimento_validos() -> dict[str, Any]:
+    return make_dados_requerimento_validos()
 
 
 @pytest.fixture()

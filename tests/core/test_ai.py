@@ -9,12 +9,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.conftest import make_ai_response, make_dados_mocao_validos
+from tests.conftest import make_ai_response, make_dados_mocao_validos, make_dados_requerimento_validos
 from z7_officeletters.core.ai import (
     extrair_dados_com_ia,
     limpar_json_da_resposta,
     validar_dados_mocao,
+    validar_dados_requerimento_pesar,
 )
+from z7_officeletters.gui.constants import detectar_tipo_propositura
+from z7_officeletters.core.documents import construir_nome_arquivo
 
 
 # =============================================================================
@@ -218,3 +221,131 @@ class TestExtrairDadosComIA:
             extrair_dados_com_ia("MOÇÃO", client)
         bruta_msgs = [r.message for r in caplog.records if "Resposta bruta" in r.message]
         assert all(len(m) < len(long_text) for m in bruta_msgs)
+
+
+# =============================================================================
+# detectar_tipo_propositura
+# =============================================================================
+class TestDetectarTipoPropositura:
+
+    def test_mocao_detectada(self) -> None:
+        assert detectar_tipo_propositura("MOÇÃO Nº 124\nTexto da moção.") == "mocao"
+
+    def test_mocao_acento_grau(self) -> None:
+        assert detectar_tipo_propositura("MOÇÃO N° 50 texto") == "mocao"
+
+    def test_requerimento_detectado(self) -> None:
+        assert detectar_tipo_propositura("REQUERIMENTO Nº 45\nTexto.") == "requerimento_pesar"
+
+    def test_requerimento_de_pesar_detectado(self) -> None:
+        assert detectar_tipo_propositura("REQUERIMENTO DE PESAR Nº 12\nTexto.") == "requerimento_pesar"
+
+    def test_requerimento_case_insensitive(self) -> None:
+        assert detectar_tipo_propositura("Requerimento nº 7 texto") == "requerimento_pesar"
+
+    def test_texto_vazio_retorna_mocao(self) -> None:
+        assert detectar_tipo_propositura("") == "mocao"
+
+    def test_texto_sem_cabecalho_retorna_mocao(self) -> None:
+        assert detectar_tipo_propositura("Texto sem cabeçalho.") == "mocao"
+
+
+# =============================================================================
+# validar_dados_requerimento_pesar
+# =============================================================================
+class TestValidarDadosRequerimentoPesar:
+
+    def test_dados_completos_nao_levanta(self) -> None:
+        validar_dados_requerimento_pesar(make_dados_requerimento_validos())
+
+    def test_falecido_vazio_nao_levanta(self) -> None:
+        # falecido é opcional
+        validar_dados_requerimento_pesar(make_dados_requerimento_validos(falecido=""))
+
+    def test_falecido_ausente_nao_levanta(self) -> None:
+        d = make_dados_requerimento_validos()
+        del d["falecido"]
+        validar_dados_requerimento_pesar(d)
+
+    @pytest.mark.parametrize("campo", ["numero_requerimento", "autores", "destinatarios"])
+    def test_campo_obrigatorio_ausente_levanta(self, campo: str) -> None:
+        d = make_dados_requerimento_validos()
+        del d[campo]
+        with pytest.raises(ValueError):
+            validar_dados_requerimento_pesar(d)
+
+    def test_autores_lista_vazia_levanta(self) -> None:
+        with pytest.raises(ValueError):
+            validar_dados_requerimento_pesar(make_dados_requerimento_validos(autores=[]))
+
+    def test_destinatarios_lista_vazia_levanta(self) -> None:
+        with pytest.raises(ValueError):
+            validar_dados_requerimento_pesar(make_dados_requerimento_validos(destinatarios=[]))
+
+    def test_destinatario_sem_nome_levanta(self) -> None:
+        with pytest.raises(ValueError, match="nome"):
+            validar_dados_requerimento_pesar(
+                make_dados_requerimento_validos(destinatarios=[{"nome": ""}])
+            )
+
+
+# =============================================================================
+# extrair_dados_com_ia — requerimento de pesar routing
+# =============================================================================
+class TestExtrairDadosComIARequerimento:
+    """Verify that tipo_propositura='requerimento_pesar' routes correctly."""
+
+    def _client(self, *responses: Any) -> MagicMock:
+        client = MagicMock()
+        client.models.generate_content.side_effect = list(responses)
+        return client
+
+    def test_retorna_dados_validos_requerimento(self) -> None:
+        client = self._client(make_ai_response(make_dados_requerimento_validos()))
+        r = extrair_dados_com_ia(
+            "REQUERIMENTO Nº 45 texto", client, tipo_propositura="requerimento_pesar"
+        )
+        assert r["numero_requerimento"] == "45"
+        assert r["falecido"] == "João da Silva"
+
+    def test_retenta_quando_numero_requerimento_ausente(self) -> None:
+        bad = make_ai_response({"autores": ["A"], "destinatarios": [{"nome": "X"}]})
+        good = make_ai_response(make_dados_requerimento_validos())
+        client = self._client(bad, good)
+        r = extrair_dados_com_ia("REQUERIMENTO", client, tipo_propositura="requerimento_pesar")
+        assert r["numero_requerimento"] == "45"
+        assert client.models.generate_content.call_count == 2
+
+
+# =============================================================================
+# construir_nome_arquivo — tipo_propositura parameter
+# =============================================================================
+class TestConstruirNomeArquivoTipoPropositura:
+
+    def test_mocao_formato_padrao(self) -> None:
+        nome = construir_nome_arquivo("001", "ajc", "Aplauso", "124", "E-mail", "João Silva", "ad", 2026)
+        assert "Moção de Aplauso" in nome
+        assert "Req." not in nome
+
+    def test_requerimento_pesar_formato(self) -> None:
+        nome = construir_nome_arquivo(
+            "001", "ajc", "", "45", "Em Mãos", "João Silva", "ad", 2026,
+            tipo_propositura="requerimento_pesar",
+        )
+        assert "Req. de Pesar" in nome
+        assert "Moção" not in nome
+
+    def test_requerimento_pesar_ano_2d(self) -> None:
+        nome = construir_nome_arquivo(
+            "001", "ajc", "", "45", "carta", "Dest", "ad", 2026,
+            tipo_propositura="requerimento_pesar",
+        )
+        assert "45-26" in nome
+
+    def test_requerimento_pesar_sem_caracteres_invalidos(self) -> None:
+        nome = construir_nome_arquivo(
+            "001", "ajc", "", "45", "E-mail", "Dest: X/Y", "ad", 2026,
+            tipo_propositura="requerimento_pesar",
+        )
+        import re
+        assert not re.search(r'[\\/*?:"<>|]', nome)

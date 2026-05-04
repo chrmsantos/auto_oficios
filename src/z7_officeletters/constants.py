@@ -28,6 +28,7 @@ __all__ = [
     "ORDEM_PREFERENCIA",
     "FORMATOS_SUPORTADOS",
     "MODELO_OFICIO",
+    "MODELO_REQUERIMENTO_PESAR",
     "MODELO_PLANILHA",
     "BASE_DIR",
     "PASTA_SAIDA",
@@ -61,6 +62,7 @@ FORMATOS_SUPORTADOS: frozenset[str] = frozenset(ORDEM_PREFERENCIA)
 
 # ── Template paths (relative to the application root) ────────────────────────
 MODELO_OFICIO: str = "templates/modelo_oficio.docx"
+MODELO_REQUERIMENTO_PESAR: str = "templates/modelo_requerimento_pesar.docx"
 MODELO_PLANILHA: str = "templates/modelo_planilha.xlsx"
 
 # ── User-data directories ─────────────────────────────────────────────────────

@@ -58,34 +58,49 @@ def construir_nome_arquivo(
     nome_dest: str,
     sigla_autores: str,
     ano: int,
+    tipo_propositura: str = "mocao",
 ) -> str:
     """Build a safe Windows filename for a generated letter document.
 
-    The filename format is::
+    For moções the filename format is::
 
         Of. {num} - {sigla} - Moção de {tipo} nº {num_mocao}-{yy} - {envio} - {dest} - {autores}.docx
+
+    For requerimentos de pesar::
+
+        Of. {num} - {sigla} - Req. de Pesar nº {num_mocao}-{yy} - {envio} - {dest} - {autores}.docx
 
     All characters that are invalid in Windows filenames are removed.
 
     Args:
         num_oficio_str: Zero-padded letter number (e.g. ``"001"``).
         sigla_servidor: Drafter's initials (e.g. ``"ajc"``).
-        tipo_mocao: Motion type (e.g. ``"Aplauso"``).
-        num_mocao: Normalised motion number (e.g. ``"124"``).
+        tipo_mocao: Motion type (e.g. ``"Aplauso"``).  Unused when
+            *tipo_propositura* is ``"requerimento_pesar"``.
+        num_mocao: Normalised propositura number (e.g. ``"124"``).
         envio: Delivery method (e.g. ``"E-mail"``).
         nome_dest: Recipient name as it appears in the address block.
         sigla_autores: Author sigla or combined sigla (e.g. ``"ad e outros"``).
-        ano: Four-digit year of the motion.
+        ano: Four-digit year of the propositura.
+        tipo_propositura: Either ``"mocao"`` (default) or
+            ``"requerimento_pesar"``.
 
     Returns:
         Sanitised filename string ending in ``.docx``.
     """
     ano_2d = f"{ano % 100:02d}"
-    nome = (
-        f"Of. {num_oficio_str} - {sigla_servidor} - "
-        f"Moção de {tipo_mocao} nº {num_mocao}-{ano_2d} - "
-        f"{envio.lower()} - {nome_dest} - {sigla_autores}.docx"
-    )
+    if tipo_propositura == "requerimento_pesar":
+        nome = (
+            f"Of. {num_oficio_str} - {sigla_servidor} - "
+            f"Req. de Pesar nº {num_mocao}-{ano_2d} - "
+            f"{envio.lower()} - {nome_dest} - {sigla_autores}.docx"
+        )
+    else:
+        nome = (
+            f"Of. {num_oficio_str} - {sigla_servidor} - "
+            f"Moção de {tipo_mocao} nº {num_mocao}-{ano_2d} - "
+            f"{envio.lower()} - {nome_dest} - {sigla_autores}.docx"
+        )
     return _RE_NOME_INVALIDO.sub("", nome)
 
 
