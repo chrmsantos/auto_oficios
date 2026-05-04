@@ -193,6 +193,13 @@ def _worker_main(
                 }
 
                 if tipo_propositura == "requerimento_pesar":
+                    ctx["vocativo"]           = "Ilustríssimos Senhores(as)"
+                    ctx["VOCATIVO"]           = "Ilustríssimos Senhores(as)"
+                    ctx["tratamento_rodape"]  = "Aos familiares do Sr.(ª),"
+                    ctx["TRATAMENTO_RODAPE"]  = "Aos familiares do Sr.(ª),"
+                    ctx["destinatario_nome"]  = falecido_str.upper()
+                    ctx["DESTINATARIO_NOME"]  = falecido_str.upper()
+
                     _tmpl = modelo_requerimento_pesar
                     if not _tmpl.exists():
                         q.put(("log",
